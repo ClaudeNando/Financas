@@ -213,7 +213,6 @@
       <button class="tab active" onclick="showView('dashboard',this)">📊 Resumo</button>
       <button class="tab" onclick="showView('lancamentos',this)">📋 Lançamentos</button>
       <button class="tab" onclick="showView('orcamento',this)">🎯 Orçamento</button>
-      <button class="tab" onclick="showView('recorrentes',this)">🔁 Recorr.</button>
       <button class="tab" onclick="showView('categorias',this)">🏷️ Cats</button>
       <button class="tab" onclick="showView('pessoas',this)">👥 Pessoas</button>
       <button class="tab" onclick="showView('config',this)">⚙️ Config</button>
@@ -256,26 +255,27 @@
 
     <!-- LANÇAMENTOS -->
     <div id="view-lancamentos" class="view">
-      <div class="section-head"><h2>Todos os Lançamentos</h2><button class="btn" onclick="openModal()">+ Lançar</button></div>
+      <div class="section-head"><h2>Lançamentos</h2>
+        <div style="display:flex;gap:6px">
+          <button class="btn sm ghost" onclick="openRecModal()">🔁 Recorrente</button>
+          <button class="btn" onclick="openModal()">+ Lançar</button>
+        </div>
+      </div>
       <div class="filters" id="txFilters">
         <button class="filter-btn active" onclick="setFilter('all',this)">Todos</button>
         <button class="filter-btn" onclick="setFilter('credit',this)">✅ Receitas</button>
         <button class="filter-btn" onclick="setFilter('debit',this)">💸 Despesas</button>
-        <button class="filter-btn" onclick="setFilter('invest',this)">📈 Investimentos</button>
+        <button class="filter-btn" onclick="setFilter('invest',this)">📈 Invest.</button>
         <button class="filter-btn" onclick="setFilter('card',this)">💳 Cartão</button>
-        <button class="filter-btn" onclick="setFilter('recorrente',this)">🔁 Recorrentes</button>
+        <button class="filter-btn" onclick="setFilter('recorrente',this)">🔁 Recorr.</button>
       </div>
       <div class="tx-list" id="fullList"></div>
-    </div>
 
-    <!-- RECORRENTES -->
-    <div id="view-recorrentes" class="view">
-      <div class="section-head">
-        <h2>Recorrentes & Parceladas</h2>
-        <button class="btn" onclick="openRecModal()">+ Novo</button>
+      <!-- RECORRENTES CADASTRADAS -->
+      <div style="margin-top:20px">
+        <div class="section-head"><h2>Recorrentes Cadastradas</h2></div>
+        <div id="recList"></div>
       </div>
-      <p style="font-size:.75rem;color:var(--text2);margin-bottom:12px">Aparecem automaticamente em cada mês dentro do período definido.</p>
-      <div id="recList"></div>
     </div>
 
     <!-- CATEGORIAS -->
@@ -769,9 +769,11 @@ window.openModal = id => {
   document.getElementById('f-obs').value='';
   document.getElementById('f-cat').innerHTML = state.categories.map(c=>`<option value="${esc(c.id)}">${esc(c.emoji)} ${esc(c.name)}</option>`).join('');
   document.getElementById('f-person').innerHTML = state.names.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('');
-  document.querySelectorAll('.type-btn').forEach(b=>b.classList.remove('selected','credit','debit','card','invest'));
-  document.querySelectorAll('.type-btn')[0].classList.add('selected','credit');
-  document.getElementById('f-parcel-group').style.display='none';
+  // reset type buttons — scope to main modal only
+  document.querySelectorAll('#modalBg .type-btn').forEach(b=>b.classList.remove('selected','credit','debit','card','invest'));
+  document.querySelectorAll('#modalBg .type-btn')[0].classList.add('selected','credit');
+  const hint = document.getElementById('card-hint');
+  if (hint) hint.style.display = 'none';
   if (id) {
     const t = transactions.find(x=>x.id===id);
     if (t) {
@@ -977,7 +979,7 @@ function renderRecorrentes() {
   const el = document.getElementById('recList');
   if (!el) return;
   if (!recorrentes.length) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">🔁</div><p>Nenhuma recorrente cadastrada</p></div>';
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🔁</div><p>Nenhuma recorrente cadastrada.<br>Clique em "🔁 Recorrente" acima.</p></div>';
     return;
   }
   const now = new Date();
@@ -991,11 +993,11 @@ function renderRecorrentes() {
       const startYM = sy * 12 + (sm - 1);
       const done = Math.max(0, Math.min(r.parcelas, curYM - startYM + 1));
       const pct  = (done / r.parcelas * 100).toFixed(0);
-      meta = `Parcelada · ${done}/${r.parcelas} pagas · início ${sm.toString().padStart(2,'0')}/${sy}`;
+      meta = `${done}/${r.parcelas} pagas · início ${String(sm).padStart(2,'0')}/${sy}`;
       progress = `<div class="rec-progress"><div class="rec-progress-fill" style="width:${pct}%;background:var(--yellow)"></div></div>`;
     } else {
       const [sy, sm] = r.startYM.split('-').map(Number);
-      meta = `Fixa desde ${sm.toString().padStart(2,'0')}/${sy}` + (r.endYM ? ` até ${r.endYM.split('-')[1]}/${r.endYM.split('-')[0]}` : ' · sem término');
+      meta = `Desde ${String(sm).padStart(2,'0')}/${sy}` + (r.endYM ? ` até ${r.endYM.split('-')[1]}/${r.endYM.split('-')[0]}` : ' · sem término');
     }
     const badge = r.kind==='parcelada'
       ? `<span class="badge yellow">💳 parcelada</span>`
@@ -1008,6 +1010,7 @@ function renderRecorrentes() {
           <div class="rec-item-meta">${meta} · dia ${r.day} · ${esc(pn)}</div>
         </div>
         <div class="rec-item-amount">-${fmt(r.value)}</div>
+        <button class="tx-del" onclick="openRecModal('${esc(r.id)}')" title="Editar" style="font-size:.8rem">✏️</button>
         <button class="tx-del" onclick="deleteRec('${esc(r.id)}')" title="Excluir">🗑</button>
       </div>
       ${progress}
@@ -1020,21 +1023,54 @@ let recEditId = null, selectedRecType = 'fixa';
 
 window.openRecModal = (id) => {
   recEditId = id || null;
-  selectedRecType = 'fixa';
-  // reset
-  ['r-desc','r-val','r-obs','r-day','r-parc-n'].forEach(x => { const el=document.getElementById(x); if(el) el.value=''; });
-  const now = new Date();
-  const ym  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  document.getElementById('r-start').value = ym;
-  document.getElementById('r-end').value   = '';
-  document.getElementById('r-parc-start').value = ym;
-  document.getElementById('r-parc-preview').textContent = '';
+  const existing = id ? recorrentes.find(r=>r.id===id) : null;
+
+  // populate selects
   document.getElementById('r-cat').innerHTML    = state.categories.map(c=>`<option value="${esc(c.id)}">${esc(c.emoji)} ${esc(c.name)}</option>`).join('');
   document.getElementById('r-person').innerHTML = state.names.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('');
-  // default category moradia for fixa
-  document.getElementById('r-cat').value = 'moradia';
-  selectRecType('fixa', document.getElementById('recTypeFixBtn'));
-  document.getElementById('recModalTitle').textContent = id ? 'Editar Recorrente' : 'Nova Recorrente / Parcelada';
+
+  const now = new Date();
+  const ym  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+  if (existing) {
+    // EDIT MODE — pre-fill all fields
+    document.getElementById('r-desc').value = existing.desc || '';
+    document.getElementById('r-val').value  = existing.value || '';
+    document.getElementById('r-day').value  = existing.day || '';
+    document.getElementById('r-cat').value  = existing.category || '';
+    document.getElementById('r-person').value = existing.person || 0;
+    document.getElementById('r-obs').value  = existing.obs || '';
+
+    const kind = existing.kind || 'fixa';
+    selectRecType(kind, kind==='fixa'
+      ? document.getElementById('recTypeFixBtn')
+      : document.getElementById('recTypeParcBtn'));
+
+    if (kind === 'fixa') {
+      document.getElementById('r-start').value = existing.startYM || ym;
+      document.getElementById('r-end').value   = existing.endYM || '';
+    } else {
+      document.getElementById('r-parc-start').value = existing.startYM || ym;
+      document.getElementById('r-parc-n').value     = existing.parcelas || '';
+      updateParcPreview();
+    }
+    document.getElementById('recModalTitle').textContent = 'Editar Recorrente';
+  } else {
+    // NEW MODE — reset all fields
+    document.getElementById('r-desc').value = '';
+    document.getElementById('r-val').value  = '';
+    document.getElementById('r-day').value  = '';
+    document.getElementById('r-obs').value  = '';
+    document.getElementById('r-start').value      = ym;
+    document.getElementById('r-end').value        = '';
+    document.getElementById('r-parc-start').value = ym;
+    document.getElementById('r-parc-n').value     = '';
+    document.getElementById('r-parc-preview').textContent = '';
+    document.getElementById('r-cat').value = 'moradia';
+    selectRecType('fixa', document.getElementById('recTypeFixBtn'));
+    document.getElementById('recModalTitle').textContent = 'Nova Recorrente / Parcelada';
+  }
+
   document.getElementById('recModalBg').classList.add('open');
 };
 window.closeRecModal   = () => document.getElementById('recModalBg').classList.remove('open');
@@ -1118,7 +1154,6 @@ window.showView = (name, btn) => {
   btn.classList.add('active');
   if (name==='pessoas') renderPeople();
   if (name==='orcamento') renderOrcamento();
-  if (name==='recorrentes') renderRecorrentes();
 };
 
 window.exportData = () => {
