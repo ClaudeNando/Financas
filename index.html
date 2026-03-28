@@ -177,6 +177,15 @@
     .orc-fill.warn{background:var(--yellow)}
     .orc-fill.over{background:var(--red)}
     .orc-pct{font-size:.68rem;color:var(--text2);margin-top:4px;text-align:right}
+
+    /* ACORDEÃO DE CATEGORIA */
+    .cat-accordion{overflow:hidden;max-height:0;transition:max-height .35s cubic-bezier(.4,0,.2,1)}
+    .cat-accordion.open{max-height:2000px}
+    .cat-accordion-inner{border-top:1px solid var(--border);margin-top:10px;padding-top:10px;display:flex;flex-direction:column;gap:6px}
+    .budget-cat-head{cursor:pointer;user-select:none}
+    .budget-cat-head:hover .budget-cat-name{color:var(--accent2)}
+    .cat-chevron{font-size:.7rem;color:var(--text2);transition:transform .3s;margin-left:4px}
+    .cat-chevron.open{transform:rotate(180deg)}
     #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--surface3);color:var(--text);padding:9px 18px;border-radius:99px;font-size:.8rem;z-index:999;transition:transform .3s;pointer-events:none;border:1px solid var(--border)}
     #toast.show{transform:translateX(-50%) translateY(0)}
     .settings-group{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:12px;border:1px solid var(--border)}
@@ -272,6 +281,14 @@
         <button class="filter-btn" onclick="setFilter('invest',this)">📈 Invest.</button>
         <button class="filter-btn" onclick="setFilter('card',this)">💳 Cartão</button>
         <button class="filter-btn" onclick="setFilter('recorrente',this)">🔁 Recorr.</button>
+      </div>
+
+      <!-- BUSCA POR NOME -->
+      <div style="position:relative;margin-bottom:10px">
+        <input id="txSearch" type="text" placeholder="🔍 Buscar lançamento..." oninput="renderTransactions()"
+          style="padding-left:12px;padding-right:32px" />
+        <button onclick="clearSearch()" id="searchClear"
+          style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text2);cursor:pointer;font-size:.9rem;padding:2px">✕</button>
       </div>
 
       <!-- SOMATÓRIO SELETIVO -->
@@ -534,6 +551,9 @@ window.changeMonth = d => {
   currentMonth += d;
   if (currentMonth < 0)  { currentMonth=11; currentYear--; }
   if (currentMonth > 11) { currentMonth=0;  currentYear++; }
+  selectedIds.clear();
+  const el = document.getElementById('txSearch');
+  if (el) el.value = '';
   renderAll();
 };
 function getRecorrentesForMonth(m, y) {
@@ -685,18 +705,42 @@ function txCard(t, selectable = false) {
 }
 
 function renderTransactions() {
+  const searchEl = document.getElementById('txSearch');
+  const query    = searchEl ? searchEl.value.trim().toLowerCase() : '';
+  const clearBtn = document.getElementById('searchClear');
+  if (clearBtn) clearBtn.style.display = query ? 'block' : 'none';
+
   // Tags show only real (manual) transactions — no virtual recorrentes mixed in
   let txs = transactions.filter(t => {
     const dt = new Date(t.date+'T12:00:00');
     return dt.getMonth()===currentMonth && dt.getFullYear()===currentYear;
   }).sort((a,b)=>new Date(b.date)-new Date(a.date));
+
   if (txFilter!=='all') txs = txs.filter(t=>t.type===txFilter);
+
+  // apply search
+  if (query) {
+    txs = txs.filter(t =>
+      t.desc.toLowerCase().includes(query) ||
+      (t.obs||'').toLowerCase().includes(query) ||
+      (state.categories.find(c=>c.id===t.category)?.name||'').toLowerCase().includes(query)
+    );
+  }
+
+  const emptyMsg = query ? 'Nenhum resultado para "' + query + '"' : 'Nenhum lançamento';
+  const emptyIcon = query ? '🔍' : '📋';
   document.getElementById('fullList').innerHTML = txs.length
     ? txs.map(t=>txCard(t, true)).join('')
-    : '<div class="empty"><div class="empty-icon">📋</div><p>Nenhum lançamento</p></div>';
+    : `<div class="empty"><div class="empty-icon">${emptyIcon}</div><p>${emptyMsg}</p></div>`;
   updateSelTotal();
   renderDespesas();
 }
+
+window.clearSearch = () => {
+  const el = document.getElementById('txSearch');
+  if (el) { el.value = ''; el.focus(); }
+  renderTransactions();
+};
 
 function renderDespesas() {
   // All expenses this month: manual debit+card + virtual recorrentes
@@ -748,6 +792,8 @@ window.clearSelection = () => {
 window.setFilter = (f,btn) => {
   txFilter = f;
   selectedIds.clear();
+  const el = document.getElementById('txSearch');
+  if (el) el.value = '';
   document.querySelectorAll('#txFilters .filter-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   renderTransactions();
@@ -762,15 +808,23 @@ function renderCategories() {
   const clr = ['#7c6af7','#34d399','#f87171','#fbbf24','#60a5fa','#f472b6','#fb923c','#a78bfa'];
   document.getElementById('catList').innerHTML = sorted.length
     ? sorted.map(([id,val],i)=>{
-        const c = state.categories.find(x=>x.id===id)||{name:id,emoji:'📦'};
-        const p = tot?(val/tot*100).toFixed(1):0;
-        const n = txs.filter(t=>t.category===id).length;
+        const c    = state.categories.find(x=>x.id===id)||{name:id,emoji:'📦'};
+        const p    = tot?(val/tot*100).toFixed(1):0;
+        const catTxs = txs.filter(t=>t.category===id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+        const items  = catTxs.map(t=>txCard(t,false)).join('');
         return `<div class="budget-cat">
-          <div class="budget-cat-head">
-            <div class="budget-cat-name">${esc(c.emoji)} ${esc(c.name)} <span class="badge purple">${n} lanç.</span></div>
+          <div class="budget-cat-head" onclick="toggleCatAccordion('cat_${esc(id)}')">
+            <div class="budget-cat-name">
+              ${esc(c.emoji)} ${esc(c.name)}
+              <span class="badge purple">${catTxs.length} lanç.</span>
+              <span class="cat-chevron" id="chev_cat_${esc(id)}">▼</span>
+            </div>
             <div class="budget-cat-amounts">${fmt(val)} <span style="color:var(--text2)">(${p}%)</span></div>
           </div>
           <div class="progress"><div class="progress-fill" style="width:${p}%;background:${clr[i%clr.length]}"></div></div>
+          <div class="cat-accordion" id="cat_${esc(id)}">
+            <div class="cat-accordion-inner">${items}</div>
+          </div>
         </div>`;
       }).join('')
     : '<div class="empty"><div class="empty-icon">🏷️</div><p>Sem despesas</p></div>';
@@ -1004,25 +1058,34 @@ function renderOrcamento() {
     if (b.pct===null && a.pct!==null) return -1;
     return (b.pct||0) - (a.pct||0);
   });
+  const allTxs = getTx().filter(t=>(t.type==='debit'||t.type==='card'||t.type==='recorrente') && t.category!=='salario');
+
   el.innerHTML = rows.map(({id, cat, spent, limit, pct}) => {
+    const catTxs = allTxs.filter(t=>t.category===id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    const items  = catTxs.map(t=>txCard(t,false)).join('');
+    const accordionId = `orc_${esc(id)}`;
+    const accordion = `<div class="cat-accordion" id="${accordionId}">
+      <div class="cat-accordion-inner">${items||'<div style="font-size:.78rem;color:var(--text2)">Sem lançamentos este mês</div>'}</div>
+    </div>`;
+
     if (!limit) {
-      // spent but no budget set
       return `<div class="orc-item">
-        <div class="orc-head">
-          <div class="orc-name">${esc(cat.emoji)} ${esc(cat.name)}</div>
+        <div class="orc-head budget-cat-head" onclick="toggleCatAccordion('${accordionId}')">
+          <div class="orc-name">${esc(cat.emoji)} ${esc(cat.name)} <span class="cat-chevron" id="chev_${accordionId}">▼</span></div>
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-family:monospace;font-size:.78rem;color:var(--text2)">${fmt(spent)} gastos</span>
-            <button class="btn sm ghost" onclick="openOrcModal('${esc(id)}')">+ Meta</button>
+            <button class="btn sm ghost" onclick="event.stopPropagation();openOrcModal('${esc(id)}')">+ Meta</button>
           </div>
         </div>
+        ${accordion}
       </div>`;
     }
     const fillClass = pct > 100 ? 'over' : pct > 80 ? 'warn' : 'ok';
     const fillW = Math.min(pct, 100).toFixed(1);
     const resto = limit - spent;
     return `<div class="orc-item">
-      <div class="orc-head">
-        <div class="orc-name">${esc(cat.emoji)} ${esc(cat.name)}</div>
+      <div class="orc-head budget-cat-head" onclick="toggleCatAccordion('${accordionId}')">
+        <div class="orc-name">${esc(cat.emoji)} ${esc(cat.name)} <span class="cat-chevron" id="chev_${accordionId}">▼</span></div>
         <div class="orc-amounts">
           <div class="orc-spent" style="color:${pct>100?'var(--red)':pct>80?'var(--yellow)':'var(--text)'}">${fmt(spent)}</div>
           <div class="orc-limit">de ${fmt(limit)}</div>
@@ -1035,10 +1098,11 @@ function renderOrcamento() {
           <span style="font-size:.68rem;color:${resto<0?'var(--red)':'var(--text2)'}">
             ${resto>=0?'sobram '+fmt(resto):'excedeu '+fmt(Math.abs(resto))}
           </span>
-          <button class="btn sm ghost" style="padding:2px 7px;font-size:.65rem" onclick="openOrcModal('${esc(id)}')">✏️</button>
-          <button class="btn sm danger" style="padding:2px 7px;font-size:.65rem" onclick="removeOrc('${esc(id)}')">✕</button>
+          <button class="btn sm ghost" style="padding:2px 7px;font-size:.65rem" onclick="event.stopPropagation();openOrcModal('${esc(id)}')">✏️</button>
+          <button class="btn sm danger" style="padding:2px 7px;font-size:.65rem" onclick="event.stopPropagation();removeOrc('${esc(id)}')">✕</button>
         </div>
       </div>
+      ${accordion}
     </div>`;
   }).join('');
 }
@@ -1297,7 +1361,13 @@ window.clearData = async () => {
   toast('Lançamentos e recorrentes apagados');
 };
 
-window.toast = msg => {
+window.toggleCatAccordion = id => {
+  const el   = document.getElementById(id);
+  const chev = document.getElementById('chev_' + id);
+  if (!el) return;
+  const isOpen = el.classList.toggle('open');
+  if (chev) chev.classList.toggle('open', isOpen);
+};
   const t=document.getElementById('toast');
   t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2400);
