@@ -676,8 +676,10 @@ function txCard(t, selectable = false) {
   const sign = isCr?'+':'-';
   const pn   = state.names[t.person||0]||'—';
   const ds   = new Date(t.date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  const recParcLabel = (t.recKind==='parcelada') ? (t.parcAtual + '/' + t.parcelN) : '🔁';
+  const recBadgeColor = (t.recKind==='parcelada') ? 'yellow' : 'orange';
   const recBadge = isRec
-    ? `<span class="badge ${t.recKind==='parcelada'?'yellow':'orange'}">${t.recKind==='parcelada'?`${t.parcAtual}/${t.parcelN}`:'🔁'}</span> `
+    ? '<span class="badge ' + recBadgeColor + '">' + recParcLabel + '</span> '
     : '';
   const delBtn = t.isRecorrente
     ? `<div class="tx-actions">
@@ -866,13 +868,14 @@ function renderPersonList() {
 function renderConfig() {
   document.getElementById('name1').value = state.names[0]||'';
   document.getElementById('name2').value = state.names[1]||'';
-  document.getElementById('catConfigList').innerHTML = state.categories.map((c,i)=>
-    `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border)">
+  document.getElementById('catConfigList').innerHTML = state.categories.map((c,i) => {
+    const delBtn = i>=10 ? '<button class="btn danger sm" onclick="removeCat(\'' + esc(c.id) + '\')">✕</button>' : '';
+    return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border)">
       <span>${esc(c.emoji)}</span>
       <span style="flex:1;font-size:.84rem">${esc(c.name)}</span>
-      ${i>=10?`<button class="btn danger sm" onclick="removeCat('${esc(c.id)}')">✕</button>`:''}
-    </div>`
-  ).join('');
+      ${delBtn}
+    </div>`;
+  }).join('');
 }
 
 async function saveSettings() {
@@ -1165,7 +1168,9 @@ function renderRecorrentes() {
       progress = `<div class="rec-progress"><div class="rec-progress-fill" style="width:${pct}%;background:var(--yellow)"></div></div>`;
     } else {
       const [sy, sm] = r.startYM.split('-').map(Number);
-      meta = `Desde ${String(sm).padStart(2,'0')}/${sy}` + (r.endYM ? ` até ${r.endYM.split('-')[1]}/${r.endYM.split('-')[0]}` : ' · sem término');
+      const startStr = String(sm).padStart(2,'0') + '/' + sy;
+      const endStr = r.endYM ? (' até ' + r.endYM.split('-')[1] + '/' + r.endYM.split('-')[0]) : ' · sem término';
+      meta = 'Desde ' + startStr + endStr;
     }
     const badge = r.kind==='parcelada'
       ? `<span class="badge yellow">💳 parcelada</span>`
@@ -1368,6 +1373,8 @@ window.toggleCatAccordion = id => {
   const isOpen = el.classList.toggle('open');
   if (chev) chev.classList.toggle('open', isOpen);
 };
+
+window.toast = msg => {
   const t=document.getElementById('toast');
   t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2400);
