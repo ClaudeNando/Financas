@@ -1,4 +1,4 @@
-const CACHE = 'casafinanca-v8';
+const CACHE = 'casafinanca-v9';
 const ASSETS = [
   '/Financas/',
   '/Financas/index.html'
@@ -17,9 +17,17 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  // Network-first: always try network, fall back to cache only when offline
   e.respondWith(
-    caches.match(e.request).then(cached =>
-      cached || fetch(e.request).catch(() => caches.match('/Financas/index.html'))
-    )
+    fetch(e.request)
+      .then(res => {
+        // Save fresh copy to cache
+        const clone = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+        return res;
+      })
+      .catch(() => caches.match(e.request).then(cached =>
+        cached || caches.match('/Financas/index.html')
+      ))
   );
 });
