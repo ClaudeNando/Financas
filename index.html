@@ -89,6 +89,9 @@
     .tx-amount.credit{color:var(--green)}.tx-amount.debit{color:var(--red)}.tx-amount.blue{color:var(--blue)}
     .tx-del{background:none;border:none;color:var(--text2);cursor:pointer;font-size:.95rem;padding:4px;border-radius:6px;transition:all .15s}
     .tx-del:hover{color:var(--red);background:rgba(248,113,113,.1)}
+    .tx-item.selected{border-color:var(--accent);background:rgba(124,106,247,.08)}
+    .tx-check{width:18px;height:18px;border-radius:4px;border:1.5px solid var(--border);background:var(--surface3);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;transition:all .15s}
+    .tx-check.checked{background:var(--accent);border-color:var(--accent);color:white}
 
     /* MODAL */
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:200;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s}
@@ -269,12 +272,23 @@
         <button class="filter-btn" onclick="setFilter('card',this)">💳 Cartão</button>
         <button class="filter-btn" onclick="setFilter('recorrente',this)">🔁 Recorr.</button>
       </div>
+
+      <!-- SOMATÓRIO SELETIVO -->
+      <div id="selTotal" style="display:none;background:var(--surface2);border:1px solid var(--accent);border-radius:var(--radius-sm);padding:9px 13px;margin-bottom:10px;display:none;align-items:center;justify-content:space-between">
+        <span style="font-size:.78rem;color:var(--text2)"><span id="selCount">0</span> selecionados</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.95rem;color:var(--accent2);font-weight:600" id="selSum">R$ 0,00</span>
+        <button onclick="clearSelection()" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:.8rem">✕ limpar</button>
+      </div>
+
       <div class="tx-list" id="fullList"></div>
 
-      <!-- RECORRENTES CADASTRADAS -->
+      <!-- DESPESAS DO MÊS -->
       <div style="margin-top:20px">
-        <div class="section-head"><h2>Recorrentes Cadastradas</h2></div>
-        <div id="recList"></div>
+        <div class="section-head">
+          <h2>Despesas do Mês</h2>
+          <span id="despTotal" style="font-family:'JetBrains Mono',monospace;font-size:.85rem;color:var(--red)"></span>
+        </div>
+        <div class="tx-list" id="despList"></div>
       </div>
     </div>
 
@@ -476,6 +490,7 @@ let currentMonth = new Date().getMonth();
 let currentYear  = new Date().getFullYear();
 let txFilter = 'all', personFilter = 'all';
 let editId = null, selectedType = 'credit';
+const selectedIds = new Set();
 
 // ── SYNC DOT ──
 const sync = s => {
@@ -588,7 +603,7 @@ const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 function renderAll() {
   document.getElementById('monthLabel').textContent = MONTHS[currentMonth]+' '+currentYear;
   renderDashboard(); renderTransactions(); renderCategories(); renderConfig();
-  renderRecorrentes(); renderHistChart(); renderOrcamento();
+  renderRecorrentes(); renderHistChart(); renderOrcamento(); renderDespesas();
 }
 
 function renderDashboard() {
@@ -612,7 +627,8 @@ function renderDashboard() {
   $('d-inv-sub').textContent  = txs.filter(t=>t.type==='invest').length+' aplicação(ões)';
 
   const catT = {};
-  txs.filter(t=>t.type==='debit'||t.type==='card'||t.type==='recorrente').forEach(t=>{ catT[t.category]=(catT[t.category]||0)+t.value; });
+  txs.filter(t=>(t.type==='debit'||t.type==='card'||t.type==='recorrente') && t.category!=='salario')
+    .forEach(t=>{ catT[t.category]=(catT[t.category]||0)+t.value; });
   const sorted = Object.entries(catT).sort((a,b)=>b[1]-a[1]).slice(0,6);
   const maxV   = sorted[0]?.[1]||1;
   const clr    = ['#7c6af7','#34d399','#f87171','#fbbf24','#60a5fa','#f472b6'];
@@ -631,7 +647,7 @@ function renderDashboard() {
     : '<div class="empty"><div class="empty-icon">💸</div><p>Nenhum lançamento este mês</p></div>';
 }
 
-function txCard(t) {
+function txCard(t, selectable = false) {
   const cat  = state.categories.find(c=>c.id===t.category)||{name:t.category||'—',emoji:'📦'};
   const isCr = t.type==='credit', isInv = t.type==='invest', isRec = t.type==='recorrente';
   const bg   = isCr?'rgba(52,211,153,.15)':isInv?'rgba(96,165,250,.15)':isRec?'rgba(251,146,60,.15)':'rgba(248,113,113,.15)';
@@ -640,12 +656,17 @@ function txCard(t) {
   const pn   = state.names[t.person||0]||'—';
   const ds   = new Date(t.date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
   const recBadge = isRec
-    ? `<span class="badge ${t.recKind==='parcelada'?'yellow':'orange'}">${t.recKind==='parcelada'?`${t.parcAtual}/${t.parcelN}`:'🔁 fixo'}</span> `
+    ? `<span class="badge ${t.recKind==='parcelada'?'yellow':'orange'}">${t.recKind==='parcelada'?`${t.parcAtual}/${t.parcelN}`:'🔁'}</span> `
     : '';
   const delBtn = t.isRecorrente
     ? `<button class="tx-del" onclick="deleteRec('${esc(t.recId)}')" title="Excluir recorrente">🗑</button>`
     : `<button class="tx-del" onclick="deleteTx('${esc(t.id)}')">✕</button>`;
-  return `<div class="tx-item">
+  const isSelected = selectedIds.has(t.id);
+  const checkBox = selectable
+    ? `<div class="tx-check ${isSelected?'checked':''}" onclick="toggleSelect('${esc(t.id)}',${t.value})">${isSelected?'✓':''}</div>`
+    : '';
+  return `<div class="tx-item ${isSelected?'selected':''}" id="txrow_${esc(t.id)}">
+    ${checkBox}
     <div class="tx-icon" style="background:${bg}">${esc(cat.emoji)}</div>
     <div class="tx-info">
       <div class="tx-desc">${recBadge}${esc(t.desc)}</div>
@@ -657,19 +678,76 @@ function txCard(t) {
 }
 
 function renderTransactions() {
-  let txs = getTx().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  // Tags show only real (manual) transactions — no virtual recorrentes mixed in
+  let txs = transactions.filter(t => {
+    const dt = new Date(t.date+'T12:00:00');
+    return dt.getMonth()===currentMonth && dt.getFullYear()===currentYear;
+  }).sort((a,b)=>new Date(b.date)-new Date(a.date));
   if (txFilter!=='all') txs = txs.filter(t=>t.type===txFilter);
-  document.getElementById('fullList').innerHTML = txs.length ? txs.map(txCard).join('')
+  document.getElementById('fullList').innerHTML = txs.length
+    ? txs.map(t=>txCard(t, true)).join('')
     : '<div class="empty"><div class="empty-icon">📋</div><p>Nenhum lançamento</p></div>';
+  updateSelTotal();
+  renderDespesas();
 }
+
+function renderDespesas() {
+  // All expenses this month: manual debit+card + virtual recorrentes
+  const allTxs = getTx();
+  const despesas = allTxs
+    .filter(t => t.type==='debit' || t.type==='card' || t.type==='recorrente')
+    .sort((a,b) => new Date(b.date)-new Date(a.date));
+  const total = despesas.reduce((s,t)=>s+t.value, 0);
+  const el = document.getElementById('despList');
+  const te = document.getElementById('despTotal');
+  if (te) te.textContent = fmt(total);
+  if (!el) return;
+  el.innerHTML = despesas.length
+    ? despesas.map(t=>txCard(t, false)).join('')
+    : '<div class="empty"><div class="empty-icon">💸</div><p>Sem despesas este mês</p></div>';
+}
+
+window.toggleSelect = (id, value) => {
+  if (selectedIds.has(id)) selectedIds.delete(id);
+  else selectedIds.add(id);
+  updateSelTotal();
+  // update just the affected row visually
+  renderTransactions();
+};
+
+function updateSelTotal() {
+  const bar = document.getElementById('selTotal');
+  if (!bar) return;
+  if (selectedIds.size === 0) {
+    bar.style.display = 'none';
+    return;
+  }
+  bar.style.display = 'flex';
+  // sum selected — look in both manual transactions and virtual
+  const allTxs = getTx();
+  let sum = 0;
+  selectedIds.forEach(id => {
+    const t = allTxs.find(x=>x.id===id);
+    if (t) sum += t.value;
+  });
+  document.getElementById('selCount').textContent = selectedIds.size;
+  document.getElementById('selSum').textContent   = fmt(sum);
+}
+
+window.clearSelection = () => {
+  selectedIds.clear();
+  renderTransactions();
+};
 window.setFilter = (f,btn) => {
   txFilter = f;
+  selectedIds.clear();
   document.querySelectorAll('#txFilters .filter-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active'); renderTransactions();
+  btn.classList.add('active');
+  renderTransactions();
 };
 
 function renderCategories() {
-  const txs = getTx().filter(t=>t.type==='debit'||t.type==='card'||t.type==='recorrente');
+  const txs = getTx().filter(t=>(t.type==='debit'||t.type==='card'||t.type==='recorrente') && t.category!=='salario');
   const tot = txs.reduce((s,t)=>s+t.value,0);
   const ct  = {};
   txs.forEach(t=>{ct[t.category]=(ct[t.category]||0)+t.value;});
@@ -878,7 +956,7 @@ function renderHistChart() {
 function renderOrcamento() {
   const el = document.getElementById('orcList');
   if (!el) return;
-  const txs = getTx().filter(t=>t.type==='debit'||t.type==='card'||t.type==='recorrente');
+  const txs = getTx().filter(t=>(t.type==='debit'||t.type==='card'||t.type==='recorrente') && t.category!=='salario');
   const budgets = state.budgets || {};
   // categories with either a budget or spending this month
   const catSpent = {};
