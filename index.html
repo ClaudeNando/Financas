@@ -79,15 +79,16 @@
 
     /* TX LIST */
     .tx-list{display:flex;flex-direction:column;gap:7px}
-    .tx-item{background:var(--surface);border-radius:var(--radius-sm);padding:11px 13px;display:flex;align-items:center;gap:11px;border:1px solid var(--border);transition:background .15s}
+    .tx-item{background:var(--surface);border-radius:var(--radius-sm);padding:11px 10px;display:flex;align-items:center;gap:8px;border:1px solid var(--border);transition:background .15s}
     .tx-item:hover{background:var(--surface2)}
     .tx-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
     .tx-info{flex:1;min-width:0}
     .tx-desc{font-size:.85rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .tx-meta{font-size:.7rem;color:var(--text2);margin-top:2px}
-    .tx-amount{font-family:'JetBrains Mono',monospace;font-size:.9rem;font-weight:500;flex-shrink:0}
+    .tx-amount{font-family:'JetBrains Mono',monospace;font-size:.88rem;font-weight:500;flex-shrink:0}
     .tx-amount.credit{color:var(--green)}.tx-amount.debit{color:var(--red)}.tx-amount.blue{color:var(--blue)}
-    .tx-del{background:none;border:none;color:var(--text2);cursor:pointer;font-size:.95rem;padding:4px;border-radius:6px;transition:all .15s}
+    .tx-actions{display:flex;gap:2px;flex-shrink:0}
+    .tx-del{background:none;border:none;color:var(--text2);cursor:pointer;font-size:.9rem;padding:4px 5px;border-radius:6px;transition:all .15s;line-height:1}
     .tx-del:hover{color:var(--red);background:rgba(248,113,113,.1)}
     .tx-item.selected{border-color:var(--accent);background:rgba(124,106,247,.08)}
     .tx-check{width:18px;height:18px;border-radius:4px;border:1.5px solid var(--border);background:var(--surface3);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;transition:all .15s}
@@ -659,8 +660,14 @@ function txCard(t, selectable = false) {
     ? `<span class="badge ${t.recKind==='parcelada'?'yellow':'orange'}">${t.recKind==='parcelada'?`${t.parcAtual}/${t.parcelN}`:'🔁'}</span> `
     : '';
   const delBtn = t.isRecorrente
-    ? `<button class="tx-del" onclick="deleteRec('${esc(t.recId)}')" title="Excluir recorrente">🗑</button>`
-    : `<button class="tx-del" onclick="deleteTx('${esc(t.id)}')">✕</button>`;
+    ? `<div class="tx-actions">
+         <button class="tx-del" onclick="openRecModal('${esc(t.recId)}')" title="Editar">✏️</button>
+         <button class="tx-del" onclick="deleteRec('${esc(t.recId)}')" title="Excluir">🗑</button>
+       </div>`
+    : `<div class="tx-actions">
+         <button class="tx-del" onclick="openModal('${esc(t.id)}')" title="Editar">✏️</button>
+         <button class="tx-del" onclick="deleteTx('${esc(t.id)}')" title="Excluir">✕</button>
+       </div>`;
   const isSelected = selectedIds.has(t.id);
   const checkBox = selectable
     ? `<div class="tx-check ${isSelected?'checked':''}" onclick="toggleSelect('${esc(t.id)}',${t.value})">${isSelected?'✓':''}</div>`
@@ -866,6 +873,25 @@ window.openModal = id => {
     document.getElementById('modalTitle').textContent='Editar Lançamento';
   } else {
     document.getElementById('modalTitle').textContent='Novo Lançamento';
+  }
+  // Show/hide type buttons based on current filter context
+  const allTypeBtns = document.querySelectorAll('#modalBg .type-btn');
+  allTypeBtns.forEach(b => b.style.display = 'flex');
+  if (txFilter === 'debit' || txFilter === 'card' || txFilter === 'recorrente') {
+    // hide Receita button (index 0) when in expense context
+    allTypeBtns[0].style.display = 'none';
+    // pre-select correct type
+    if (!id) {
+      const defaultType = txFilter === 'card' ? 'card' : txFilter === 'invest' ? 'invest' : 'debit';
+      document.querySelectorAll('#modalBg .type-btn').forEach(b=>b.classList.remove('selected','credit','debit','card','invest'));
+      selectType(defaultType, null, false);
+    }
+  } else if (txFilter === 'invest') {
+    // hide Receita and pre-select invest
+    if (!id) {
+      document.querySelectorAll('#modalBg .type-btn').forEach(b=>b.classList.remove('selected','credit','debit','card','invest'));
+      selectType('invest', null, false);
+    }
   }
   document.getElementById('modalBg').classList.add('open');
 };
