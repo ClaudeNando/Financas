@@ -40,8 +40,9 @@
     main{flex:1;padding:16px;max-width:900px;margin:0 auto;width:100%}
 
     /* TABS */
-    .tabs{display:flex;gap:5px;background:var(--surface);border-radius:var(--radius);padding:5px;margin-bottom:16px}
-    .tab{flex:1;padding:7px 3px;border:none;background:transparent;color:var(--text2);border-radius:var(--radius-sm);cursor:pointer;font-family:'Sora',sans-serif;font-size:.75rem;font-weight:500;transition:all .2s;white-space:nowrap}
+    .tabs{display:flex;gap:5px;background:var(--surface);border-radius:var(--radius);padding:5px;margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .tabs::-webkit-scrollbar{display:none}
+    .tab{flex-shrink:0;padding:7px 10px;border:none;background:transparent;color:var(--text2);border-radius:var(--radius-sm);cursor:pointer;font-family:'Sora',sans-serif;font-size:.75rem;font-weight:500;transition:all .2s;white-space:nowrap}
     .tab.active{background:var(--accent);color:white}
     .tab:hover:not(.active){background:var(--surface3);color:var(--text)}
 
@@ -342,6 +343,9 @@
       <button class="type-btn" onclick="selectType('card',this)">💳 Cartão</button>
       <button class="type-btn" onclick="selectType('invest',this)">📈 Invest.</button>
     </div>
+    <div id="card-hint" style="display:none;font-size:.73rem;color:var(--yellow);background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:12px">
+      💡 Para compras parceladas use a aba <strong>🔁 Recorr.</strong> — ela distribui automaticamente as parcelas nos meses seguintes.
+    </div>
     <div class="form-group"><label>Descrição *</label><input id="f-desc" type="text" placeholder="Ex: Salário, Aluguel, Mercado..." /></div>
     <div class="form-row">
       <div class="form-group"><label>Valor (R$) *</label><input id="f-val" type="number" step="0.01" min="0" placeholder="0,00" /></div>
@@ -350,13 +354,6 @@
     <div class="form-row">
       <div class="form-group"><label>Categoria</label><select id="f-cat"></select></div>
       <div class="form-group"><label>Pessoa</label><select id="f-person"></select></div>
-    </div>
-    <div class="form-group" id="f-parcel-group" style="display:none">
-      <label>Parcelas (cartão)</label>
-      <select id="f-parcelas">
-        <option value="1">À vista</option><option value="2">2x</option><option value="3">3x</option>
-        <option value="4">4x</option><option value="6">6x</option><option value="10">10x</option><option value="12">12x</option>
-      </select>
     </div>
     <div class="form-group"><label>Observação</label><input id="f-obs" type="text" placeholder="Opcional" /></div>
     <div style="display:flex;gap:8px">
@@ -801,10 +798,12 @@ window.selectType = (type, btn, silent) => {
   if (btn) { btn.classList.add('selected',type); }
   else {
     const idx=['credit','debit','card','invest'].indexOf(type);
-    const btns=document.querySelectorAll('.type-btn');
+    const btns=document.querySelectorAll('#modalBg .type-btn');
     if(idx>=0&&btns[idx]) btns[idx].classList.add('selected',type);
   }
-  document.getElementById('f-parcel-group').style.display = type==='card'?'block':'none';
+  // show hint for card type
+  const hint = document.getElementById('card-hint');
+  if (hint) hint.style.display = type==='card' ? 'block' : 'none';
   if(type==='credit'&&!silent) document.getElementById('f-cat').value='salario';
 };
 
@@ -815,11 +814,10 @@ window.saveTransaction = async () => {
   const category = document.getElementById('f-cat').value;
   const person   = parseInt(document.getElementById('f-person').value);
   const obs      = document.getElementById('f-obs').value.trim();
-  const parcelas = parseInt(document.getElementById('f-parcelas').value)||1;
   if(!desc||isNaN(val)||val<=0||!date){ toast('Preencha descrição, valor (>0) e data'); return; }
   const btn = document.getElementById('saveBtn');
   btn.disabled=true; btn.textContent='Salvando...';
-  const tx = {desc, value:val, date, category, person, obs, type:selectedType, parcelas};
+  const tx = {desc, value:val, date, category, person, obs, type:selectedType};
   try {
     if(editId) { await updateDoc(txRef(editId),{...tx, updatedAt:serverTimestamp()}); editId=null; }
     else { await addDoc(txCol(),{...tx, createdAt:serverTimestamp()}); }
@@ -926,7 +924,7 @@ function renderOrcamento() {
       </div>
       <div class="orc-progress"><div class="orc-fill ${fillClass}" style="width:${fillW}%"></div></div>
       <div style="display:flex;justify-content:space-between;margin-top:5px">
-        <div class="orc-pct">${pct.toFixed(0)}% utilizado</div>
+        <div class="orc-pct">${Number(pct).toFixed(0)}% utilizado</div>
         <div style="display:flex;gap:6px;align-items:center">
           <span style="font-size:.68rem;color:${resto<0?'var(--red)':'var(--text2)'}">
             ${resto>=0?'sobram '+fmt(resto):'excedeu '+fmt(Math.abs(resto))}
@@ -1118,11 +1116,13 @@ window.showView = (name, btn) => {
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   btn.classList.add('active');
-  if(name==='pessoas') renderPeople();
+  if (name==='pessoas') renderPeople();
+  if (name==='orcamento') renderOrcamento();
+  if (name==='recorrentes') renderRecorrentes();
 };
 
 window.exportData = () => {
-  const blob = new Blob([JSON.stringify({names:state.names,categories:state.categories,transactions},null,2)],{type:'application/json'});
+  const blob = new Blob([JSON.stringify({names:state.names,categories:state.categories,budgets:state.budgets||{},transactions,recorrentes},null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='casafinanca_'+new Date().toISOString().split('T')[0]+'.json'; a.click(); toast('Exportado!');
 };
@@ -1149,10 +1149,13 @@ window.importData  = async e => {
   reader.readAsText(file);
 };
 window.clearData = async () => {
-  if(!confirm('Apagar TODOS os lançamentos? Categorias e nomes mantidos.')) return;
-  const snap=await getDocs(txCol());
-  for(const d of snap.docs) await deleteDoc(txRef(d.id));
-  toast('Lançamentos apagados');
+  if(!confirm('Apagar TODOS os lançamentos e recorrentes? Categorias, orçamentos e nomes serão mantidos.')) return;
+  const [txSnap, recSnap] = await Promise.all([getDocs(txCol()), getDocs(recCol())]);
+  await Promise.all([
+    ...txSnap.docs.map(d=>deleteDoc(txRef(d.id))),
+    ...recSnap.docs.map(d=>deleteDoc(recRef(d.id)))
+  ]);
+  toast('Lançamentos e recorrentes apagados');
 };
 
 window.toast = msg => {
