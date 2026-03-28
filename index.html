@@ -133,6 +133,45 @@
     .filter-btn.active{background:var(--accent);border-color:var(--accent);color:white}
     .badge{font-size:.65rem;padding:2px 7px;border-radius:99px;font-weight:500;display:inline-flex;align-items:center}
     .badge.purple{background:rgba(124,106,247,.15);color:var(--accent2)}
+    .badge.orange{background:rgba(251,146,60,.15);color:var(--orange)}
+    .badge.yellow{background:rgba(251,191,36,.15);color:var(--yellow)}
+    /* RECORRENTE CARD */
+    .rec-item{background:var(--surface);border-radius:var(--radius-sm);padding:13px;border:1px solid var(--border);margin-bottom:8px}
+    .rec-item-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+    .rec-item-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+    .rec-item-info{flex:1;min-width:0}
+    .rec-item-desc{font-size:.87rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .rec-item-meta{font-size:.7rem;color:var(--text2);margin-top:2px}
+    .rec-item-amount{font-family:'JetBrains Mono',monospace;font-size:.92rem;font-weight:500;color:var(--red);flex-shrink:0}
+    .rec-progress{height:4px;background:var(--surface3);border-radius:99px;overflow:hidden;margin-top:8px}
+    .rec-progress-fill{height:100%;border-radius:99px;background:var(--orange)}
+
+    /* COMPARATIVO MENSAL */
+    .chart-wrap{background:var(--surface);border-radius:var(--radius);padding:18px;margin-bottom:16px;border:1px solid var(--border)}
+    .chart-wrap h3{font-size:.82rem;color:var(--text2);margin-bottom:12px}
+    .chart-legend{display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap}
+    .chart-legend-item{display:flex;align-items:center;gap:5px;font-size:.7rem;color:var(--text2)}
+    .chart-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .chart-cols{display:flex;align-items:flex-end;gap:5px;height:110px}
+    .chart-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%}
+    .chart-col-bars{flex:1;display:flex;align-items:flex-end;gap:2px;width:100%}
+    .chart-bar{flex:1;border-radius:4px 4px 0 0;transition:height .5s cubic-bezier(.4,0,.2,1);min-height:2px}
+    .chart-col-label{font-size:.63rem;color:var(--text2);text-align:center;white-space:nowrap}
+    .chart-col-saldo{font-family:'JetBrains Mono',monospace;font-size:.58rem;text-align:center;margin-top:1px}
+
+    /* ORÇAMENTO */
+    .orc-item{background:var(--surface);border-radius:var(--radius);padding:14px;margin-bottom:9px;border:1px solid var(--border)}
+    .orc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .orc-name{font-size:.85rem;font-weight:500;display:flex;align-items:center;gap:6px}
+    .orc-amounts{font-family:'JetBrains Mono',monospace;font-size:.73rem;text-align:right;line-height:1.5}
+    .orc-spent{font-weight:600}
+    .orc-limit{color:var(--text2)}
+    .orc-progress{height:7px;background:var(--surface3);border-radius:99px;overflow:hidden}
+    .orc-fill{height:100%;border-radius:99px;transition:width .5s}
+    .orc-fill.ok{background:var(--green)}
+    .orc-fill.warn{background:var(--yellow)}
+    .orc-fill.over{background:var(--red)}
+    .orc-pct{font-size:.68rem;color:var(--text2);margin-top:4px;text-align:right}
     #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--surface3);color:var(--text);padding:9px 18px;border-radius:99px;font-size:.8rem;z-index:999;transition:transform .3s;pointer-events:none;border:1px solid var(--border)}
     #toast.show{transform:translateX(-50%) translateY(0)}
     .settings-group{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:12px;border:1px solid var(--border)}
@@ -172,7 +211,9 @@
     <div class="tabs">
       <button class="tab active" onclick="showView('dashboard',this)">📊 Resumo</button>
       <button class="tab" onclick="showView('lancamentos',this)">📋 Lançamentos</button>
-      <button class="tab" onclick="showView('categorias',this)">🏷️ Categorias</button>
+      <button class="tab" onclick="showView('orcamento',this)">🎯 Orçamento</button>
+      <button class="tab" onclick="showView('recorrentes',this)">🔁 Recorr.</button>
+      <button class="tab" onclick="showView('categorias',this)">🏷️ Cats</button>
       <button class="tab" onclick="showView('pessoas',this)">👥 Pessoas</button>
       <button class="tab" onclick="showView('config',this)">⚙️ Config</button>
     </div>
@@ -186,8 +227,30 @@
         <div class="card"><div class="card-label">Investimentos</div><div class="card-value blue" id="d-invest">R$ 0</div><div class="card-sub" id="d-inv-sub"></div></div>
       </div>
       <div class="balance-bar"><h3>Distribuição por Categoria</h3><div class="bar-wrap" id="catBars"></div></div>
+
+      <!-- COMPARATIVO 6 MESES -->
+      <div class="chart-wrap">
+        <h3>Últimos 6 Meses</h3>
+        <div class="chart-legend">
+          <div class="chart-legend-item"><div class="chart-legend-dot" style="background:var(--green)"></div>Receitas</div>
+          <div class="chart-legend-item"><div class="chart-legend-dot" style="background:var(--red)"></div>Despesas</div>
+          <div class="chart-legend-item"><div class="chart-legend-dot" style="background:var(--blue)"></div>Invest.</div>
+        </div>
+        <div class="chart-cols" id="histChart"></div>
+      </div>
+
       <div class="section-head"><h2>Últimos Lançamentos</h2><button class="btn sm" onclick="openModal()">+ Novo</button></div>
       <div class="tx-list" id="recentList"></div>
+    </div>
+
+    <!-- ORÇAMENTO -->
+    <div id="view-orcamento" class="view">
+      <div class="section-head">
+        <h2>Orçamento por Categoria</h2>
+        <button class="btn sm" onclick="openOrcModal()">+ Meta</button>
+      </div>
+      <p style="font-size:.75rem;color:var(--text2);margin-bottom:14px">Defina um limite mensal por categoria e acompanhe seu progresso.</p>
+      <div id="orcList"></div>
     </div>
 
     <!-- LANÇAMENTOS -->
@@ -199,8 +262,19 @@
         <button class="filter-btn" onclick="setFilter('debit',this)">💸 Despesas</button>
         <button class="filter-btn" onclick="setFilter('invest',this)">📈 Investimentos</button>
         <button class="filter-btn" onclick="setFilter('card',this)">💳 Cartão</button>
+        <button class="filter-btn" onclick="setFilter('recorrente',this)">🔁 Recorrentes</button>
       </div>
       <div class="tx-list" id="fullList"></div>
+    </div>
+
+    <!-- RECORRENTES -->
+    <div id="view-recorrentes" class="view">
+      <div class="section-head">
+        <h2>Recorrentes & Parceladas</h2>
+        <button class="btn" onclick="openRecModal()">+ Novo</button>
+      </div>
+      <p style="font-size:.75rem;color:var(--text2);margin-bottom:12px">Aparecem automaticamente em cada mês dentro do período definido.</p>
+      <div id="recList"></div>
     </div>
 
     <!-- CATEGORIAS -->
@@ -292,7 +366,67 @@
   </div>
 </div>
 
+<!-- MODAL ORÇAMENTO -->
+<div class="modal-backdrop" id="orcModalBg" onclick="closeOrcModalBg(event)">
+  <div class="modal">
+    <h2>Definir Meta de Orçamento</h2>
+    <div class="form-group"><label>Categoria</label><select id="o-cat"></select></div>
+    <div class="form-group"><label>Limite mensal (R$) *</label><input id="o-limit" type="number" step="0.01" min="0" placeholder="Ex: 1500,00" /></div>
+    <p style="font-size:.75rem;color:var(--text2);margin-bottom:14px">A meta se aplica a todos os meses. Você pode alterar ou remover a qualquer momento.</p>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="orcSaveBtn" style="flex:1" onclick="saveOrcamento()">Salvar</button>
+      <button class="btn ghost" onclick="closeOrcModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
+
+<!-- MODAL RECORRENTE -->
+<div class="modal-backdrop" id="recModalBg" onclick="closeRecModalBg(event)">
+  <div class="modal">
+    <h2 id="recModalTitle">Nova Recorrente / Parcelada</h2>
+
+    <!-- tipo de recorrente -->
+    <div class="type-toggle" style="margin-bottom:14px">
+      <button class="type-btn selected recfix" id="recTypeFixBtn" onclick="selectRecType('fixa',this)" style="border-color:var(--orange);color:var(--orange);background:rgba(251,146,60,.1)">🔁 Fixa</button>
+      <button class="type-btn" id="recTypeParcBtn" onclick="selectRecType('parcelada',this)">💳 Parcelada</button>
+    </div>
+
+    <div class="form-group"><label>Descrição *</label><input id="r-desc" type="text" placeholder="Ex: Financiamento, Netflix..." /></div>
+    <div class="form-row">
+      <div class="form-group"><label>Valor (R$) *</label><input id="r-val" type="number" step="0.01" min="0" placeholder="0,00" /></div>
+      <div class="form-group"><label id="r-day-label">Dia do mês *</label><input id="r-day" type="number" min="1" max="31" placeholder="Ex: 10" /></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Categoria</label><select id="r-cat"></select></div>
+      <div class="form-group"><label>Pessoa</label><select id="r-person"></select></div>
+    </div>
+
+    <!-- campos fixa -->
+    <div id="r-fixa-fields">
+      <div class="form-row">
+        <div class="form-group"><label>Início (mês/ano) *</label><input id="r-start" type="month" /></div>
+        <div class="form-group"><label>Término (deixe vazio = sem fim)</label><input id="r-end" type="month" /></div>
+      </div>
+    </div>
+
+    <!-- campos parcelada -->
+    <div id="r-parc-fields" style="display:none">
+      <div class="form-row">
+        <div class="form-group"><label>Mês da 1ª parcela *</label><input id="r-parc-start" type="month" /></div>
+        <div class="form-group"><label>Nº de parcelas *</label><input id="r-parc-n" type="number" min="2" max="360" placeholder="Ex: 12" /></div>
+      </div>
+      <div class="form-group" style="font-size:.75rem;color:var(--text2);padding:6px 10px;background:var(--surface3);border-radius:var(--radius-sm)" id="r-parc-preview"></div>
+    </div>
+
+    <div class="form-group"><label>Observação</label><input id="r-obs" type="text" placeholder="Opcional" /></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="recSaveBtn" style="flex:1" onclick="saveRecorrente()">Salvar</button>
+      <button class="btn ghost" onclick="closeRecModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
 
 <script type="module">
 import { initializeApp }
@@ -318,6 +452,8 @@ const FAMILY = 'familia_principal';
 const setRef  = () => doc(db, 'families', FAMILY, 'settings', 'main');
 const txCol   = () => collection(db, 'families', FAMILY, 'transactions');
 const txRef   = id => doc(db, 'families', FAMILY, 'transactions', id);
+const recCol  = () => collection(db, 'families', FAMILY, 'recorrentes');
+const recRef  = id => doc(db, 'families', FAMILY, 'recorrentes', id);
 
 // ── STATE ──
 let state = {
@@ -333,10 +469,12 @@ let state = {
     {id:'servicos',    name:'Serviços/Assin.',      emoji:'📱'},
     {id:'salario',     name:'Salário',              emoji:'💰'},
     {id:'outros',      name:'Outros',               emoji:'📦'},
-  ]
+  ],
+  budgets: {} // { catId: limitValue }
 };
 let transactions = [];
-let unsub = null;
+let recorrentes  = [];
+let unsub = null, unsubRec = null;
 let currentMonth = new Date().getMonth();
 let currentYear  = new Date().getFullYear();
 let txFilter = 'all', personFilter = 'all';
@@ -356,12 +494,18 @@ async function boot() {
       const d = snap.data();
       if (d.names)      state.names      = d.names;
       if (d.categories) state.categories = d.categories;
+      if (d.budgets)    state.budgets    = d.budgets;
     }
     if (unsub) unsub();
     unsub = onSnapshot(txCol(), s => {
       transactions = s.docs.map(d=>({id:d.id,...d.data()}));
       renderAll(); sync('ok');
     }, () => sync('error'));
+    if (unsubRec) unsubRec();
+    unsubRec = onSnapshot(recCol(), s => {
+      recorrentes = s.docs.map(d=>({id:d.id,...d.data()}));
+      renderAll();
+    }, () => {});
   } catch {
     sync('error');
     toast('Sem conexão — verifique sua internet');
@@ -379,11 +523,66 @@ window.changeMonth = d => {
   if (currentMonth > 11) { currentMonth=0;  currentYear++; }
   renderAll();
 };
+function getRecorrentesForMonth(m, y) {
+  const result = [];
+  const ym = y * 12 + m; // absolute month index
+  for (const r of recorrentes) {
+    if (r.kind === 'fixa') {
+      const [sy, sm] = r.startYM.split('-').map(Number);
+      const startYM = sy * 12 + (sm - 1);
+      const endYM = r.endYM ? (() => { const [ey, em] = r.endYM.split('-').map(Number); return ey * 12 + (em - 1); })() : Infinity;
+      if (ym >= startYM && ym <= endYM) {
+        const day = Math.min(r.day, new Date(y, m + 1, 0).getDate());
+        result.push({
+          id: 'rec_' + r.id + '_' + y + '_' + m,
+          recId: r.id,
+          desc: r.desc,
+          value: r.value,
+          date: `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`,
+          category: r.category,
+          person: r.person,
+          obs: r.obs,
+          type: 'recorrente',
+          isRecorrente: true,
+          recKind: 'fixa'
+        });
+      }
+    } else if (r.kind === 'parcelada') {
+      const [sy, sm] = r.startYM.split('-').map(Number);
+      const startYM = sy * 12 + (sm - 1);
+      const parcelN = r.parcelas;
+      const endYM = startYM + parcelN - 1;
+      if (ym >= startYM && ym <= endYM) {
+        const parcAtual = ym - startYM + 1;
+        const day = Math.min(r.day, new Date(y, m + 1, 0).getDate());
+        result.push({
+          id: 'rec_' + r.id + '_' + y + '_' + m,
+          recId: r.id,
+          desc: r.desc + ` (${parcAtual}/${parcelN})`,
+          value: r.value,
+          date: `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`,
+          category: r.category,
+          person: r.person,
+          obs: r.obs,
+          type: 'recorrente',
+          isRecorrente: true,
+          recKind: 'parcelada',
+          parcAtual,
+          parcelN
+        });
+      }
+    }
+  }
+  return result;
+}
+
 function getTx() {
-  return transactions.filter(t => {
+  const manual = transactions.filter(t => {
     const dt = new Date(t.date + 'T12:00:00');
     return dt.getMonth()===currentMonth && dt.getFullYear()===currentYear;
   });
+  const virtual = getRecorrentesForMonth(currentMonth, currentYear);
+  return [...manual, ...virtual];
 }
 const fmt = v => 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -392,12 +591,13 @@ const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 function renderAll() {
   document.getElementById('monthLabel').textContent = MONTHS[currentMonth]+' '+currentYear;
   renderDashboard(); renderTransactions(); renderCategories(); renderConfig();
+  renderRecorrentes(); renderHistChart(); renderOrcamento();
 }
 
 function renderDashboard() {
   const txs = getTx();
   const rec  = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
-  const desp = txs.filter(t=>t.type==='debit'||t.type==='card').reduce((s,t)=>s+t.value,0);
+  const desp = txs.filter(t=>t.type==='debit'||t.type==='card'||t.type==='recorrente').reduce((s,t)=>s+t.value,0);
   const inv  = txs.filter(t=>t.type==='invest').reduce((s,t)=>s+t.value,0);
   const sal  = rec - desp - inv;
   const $    = id => document.getElementById(id);
@@ -409,12 +609,13 @@ function renderDashboard() {
   $('d-invest').textContent    = fmt(inv);
   const fix = txs.filter(t=>t.type==='debit').reduce((s,t)=>s+t.value,0);
   const crd = txs.filter(t=>t.type==='card').reduce((s,t)=>s+t.value,0);
-  $('d-desp-sub').textContent = `Fixo: ${fmt(fix)} · Cartão: ${fmt(crd)}`;
+  const rcc = txs.filter(t=>t.type==='recorrente').reduce((s,t)=>s+t.value,0);
+  $('d-desp-sub').textContent = `Fixo: ${fmt(fix)} · Cartão: ${fmt(crd)} · Rec: ${fmt(rcc)}`;
   $('d-rec-sub').textContent  = txs.filter(t=>t.type==='credit').length+' lançamento(s)';
   $('d-inv-sub').textContent  = txs.filter(t=>t.type==='invest').length+' aplicação(ões)';
 
   const catT = {};
-  txs.filter(t=>t.type==='debit'||t.type==='card').forEach(t=>{ catT[t.category]=(catT[t.category]||0)+t.value; });
+  txs.filter(t=>t.type==='debit'||t.type==='card'||t.type==='recorrente').forEach(t=>{ catT[t.category]=(catT[t.category]||0)+t.value; });
   const sorted = Object.entries(catT).sort((a,b)=>b[1]-a[1]).slice(0,6);
   const maxV   = sorted[0]?.[1]||1;
   const clr    = ['#7c6af7','#34d399','#f87171','#fbbf24','#60a5fa','#f472b6'];
@@ -435,21 +636,26 @@ function renderDashboard() {
 
 function txCard(t) {
   const cat  = state.categories.find(c=>c.id===t.category)||{name:t.category||'—',emoji:'📦'};
-  const isCr = t.type==='credit', isInv = t.type==='invest';
-  const bg   = isCr?'rgba(52,211,153,.15)':isInv?'rgba(96,165,250,.15)':'rgba(248,113,113,.15)';
+  const isCr = t.type==='credit', isInv = t.type==='invest', isRec = t.type==='recorrente';
+  const bg   = isCr?'rgba(52,211,153,.15)':isInv?'rgba(96,165,250,.15)':isRec?'rgba(251,146,60,.15)':'rgba(248,113,113,.15)';
   const cls  = isCr?'credit':isInv?'blue':'debit';
   const sign = isCr?'+':'-';
   const pn   = state.names[t.person||0]||'—';
-  const par  = t.parcelas>1?` · ${t.parcelas}x`:'';
   const ds   = new Date(t.date+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+  const recBadge = isRec
+    ? `<span class="badge ${t.recKind==='parcelada'?'yellow':'orange'}">${t.recKind==='parcelada'?`${t.parcAtual}/${t.parcelN}`:'🔁 fixo'}</span> `
+    : '';
+  const delBtn = t.isRecorrente
+    ? `<button class="tx-del" onclick="deleteRec('${esc(t.recId)}')" title="Excluir recorrente">🗑</button>`
+    : `<button class="tx-del" onclick="deleteTx('${esc(t.id)}')">✕</button>`;
   return `<div class="tx-item">
     <div class="tx-icon" style="background:${bg}">${esc(cat.emoji)}</div>
     <div class="tx-info">
-      <div class="tx-desc">${esc(t.desc)}</div>
-      <div class="tx-meta">${ds} · ${esc(cat.name)}${par} · ${esc(pn)}${t.obs?' · '+esc(t.obs):''}</div>
+      <div class="tx-desc">${recBadge}${esc(t.desc)}</div>
+      <div class="tx-meta">${ds} · ${esc(cat.name)} · ${esc(pn)}${t.obs?' · '+esc(t.obs):''}</div>
     </div>
     <div class="tx-amount ${cls}">${sign}${fmt(t.value)}</div>
-    <button class="tx-del" onclick="deleteTx('${esc(t.id)}')">✕</button>
+    ${delBtn}
   </div>`;
 }
 
@@ -466,7 +672,7 @@ window.setFilter = (f,btn) => {
 };
 
 function renderCategories() {
-  const txs = getTx().filter(t=>t.type==='debit'||t.type==='card');
+  const txs = getTx().filter(t=>t.type==='debit'||t.type==='card'||t.type==='recorrente');
   const tot = txs.reduce((s,t)=>s+t.value,0);
   const ct  = {};
   txs.forEach(t=>{ct[t.category]=(ct[t.category]||0)+t.value;});
@@ -493,7 +699,7 @@ function renderPeople() {
   document.getElementById('peopleCards').innerHTML = state.names.map((name,idx)=>{
     const pt = txs.filter(t=>(t.person||0)==idx);
     const inc = pt.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
-    const sp  = pt.filter(t=>t.type==='debit'||t.type==='card').reduce((s,t)=>s+t.value,0);
+    const sp  = pt.filter(t=>t.type==='debit'||t.type==='card'||t.type==='recorrente').reduce((s,t)=>s+t.value,0);
     return `<div class="person-card">
       <div class="person-avatar" style="background:${idx===0?'rgba(124,106,247,.2)':'rgba(244,114,182,.2)'}">${idx===0?'👨':'👩'}</div>
       <div class="person-name">${esc(name)}</div>
@@ -535,7 +741,7 @@ function renderConfig() {
 
 async function saveSettings() {
   sync('syncing');
-  try { await setDoc(setRef(),{names:state.names,categories:state.categories},{merge:true}); sync('ok'); }
+  try { await setDoc(setRef(),{names:state.names,categories:state.categories,budgets:state.budgets||{}},{merge:true}); sync('ok'); }
   catch { sync('error'); toast('Erro ao salvar configurações'); }
 }
 
@@ -625,6 +831,285 @@ window.saveTransaction = async () => {
 window.deleteTx = async id => {
   if(!confirm('Remover este lançamento?')) return;
   try { await deleteDoc(txRef(id)); toast('Removido'); }
+  catch { toast('Erro ao remover'); }
+};
+
+// ── HISTÓRICO 6 MESES ──
+function renderHistChart() {
+  const el = document.getElementById('histChart');
+  if (!el) return;
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    let m = currentMonth - i, y = currentYear;
+    if (m < 0) { m += 12; y--; }
+    months.push({m, y, label: ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m]});
+  }
+  const data = months.map(({m, y, label}) => {
+    const txs = [
+      ...transactions.filter(t => { const d=new Date(t.date+'T12:00:00'); return d.getMonth()===m&&d.getFullYear()===y; }),
+      ...getRecorrentesForMonth(m, y)
+    ];
+    const rec  = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
+    const desp = txs.filter(t=>t.type==='debit'||t.type==='card'||t.type==='recorrente').reduce((s,t)=>s+t.value,0);
+    const inv  = txs.filter(t=>t.type==='invest').reduce((s,t)=>s+t.value,0);
+    return {label, rec, desp, inv, saldo: rec - desp - inv};
+  });
+  const maxVal = Math.max(...data.flatMap(d=>[d.rec, d.desp, d.inv]), 1);
+  const isCur  = (i) => months[i].m === currentMonth && months[i].y === currentYear;
+  el.innerHTML = data.map((d, i) => {
+    const hRec  = Math.round(d.rec  / maxVal * 100);
+    const hDesp = Math.round(d.desp / maxVal * 100);
+    const hInv  = Math.round(d.inv  / maxVal * 100);
+    const saldoColor = d.saldo >= 0 ? 'var(--green)' : 'var(--red)';
+    const cur = isCur(i) ? 'opacity:1' : 'opacity:.65';
+    return `<div class="chart-col" style="${cur}">
+      <div class="chart-col-bars">
+        <div class="chart-bar" style="height:${hRec}%;background:var(--green)" title="Receitas: ${fmt(d.rec)}"></div>
+        <div class="chart-bar" style="height:${hDesp}%;background:var(--red)"  title="Despesas: ${fmt(d.desp)}"></div>
+        <div class="chart-bar" style="height:${hInv}%;background:var(--blue)"  title="Invest.: ${fmt(d.inv)}"></div>
+      </div>
+      <div class="chart-col-label">${d.label}${isCur(i)?'<br><span style="color:var(--accent2)">●</span>':''}</div>
+      <div class="chart-col-saldo" style="color:${saldoColor}">${d.saldo>=0?'+':''}${d.saldo===0?'—':fmt(d.saldo).replace('R$ ','')}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── ORÇAMENTO ──
+function renderOrcamento() {
+  const el = document.getElementById('orcList');
+  if (!el) return;
+  const txs = getTx().filter(t=>t.type==='debit'||t.type==='card'||t.type==='recorrente');
+  const budgets = state.budgets || {};
+  // categories with either a budget or spending this month
+  const catSpent = {};
+  txs.forEach(t => { catSpent[t.category] = (catSpent[t.category]||0) + t.value; });
+  const catIds = [...new Set([...Object.keys(budgets), ...Object.keys(catSpent)])];
+  if (!catIds.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🎯</div><p>Nenhuma meta definida ainda.<br>Clique em "+ Meta" para começar.</p></div>';
+    return;
+  }
+  // sort: over budget first, then by % spent desc
+  const rows = catIds.map(id => {
+    const cat   = state.categories.find(c=>c.id===id)||{name:id,emoji:'📦'};
+    const spent = catSpent[id]||0;
+    const limit = budgets[id]||0;
+    const pct   = limit ? Math.min((spent/limit*100),999) : null;
+    return {id, cat, spent, limit, pct};
+  }).sort((a,b) => {
+    if (a.pct===null && b.pct!==null) return 1;
+    if (b.pct===null && a.pct!==null) return -1;
+    return (b.pct||0) - (a.pct||0);
+  });
+  el.innerHTML = rows.map(({id, cat, spent, limit, pct}) => {
+    if (!limit) {
+      // spent but no budget set
+      return `<div class="orc-item">
+        <div class="orc-head">
+          <div class="orc-name">${esc(cat.emoji)} ${esc(cat.name)}</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-family:monospace;font-size:.78rem;color:var(--text2)">${fmt(spent)} gastos</span>
+            <button class="btn sm ghost" onclick="openOrcModal('${esc(id)}')">+ Meta</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    const fillClass = pct > 100 ? 'over' : pct > 80 ? 'warn' : 'ok';
+    const fillW = Math.min(pct, 100).toFixed(1);
+    const resto = limit - spent;
+    return `<div class="orc-item">
+      <div class="orc-head">
+        <div class="orc-name">${esc(cat.emoji)} ${esc(cat.name)}</div>
+        <div class="orc-amounts">
+          <div class="orc-spent" style="color:${pct>100?'var(--red)':pct>80?'var(--yellow)':'var(--text)'}">${fmt(spent)}</div>
+          <div class="orc-limit">de ${fmt(limit)}</div>
+        </div>
+      </div>
+      <div class="orc-progress"><div class="orc-fill ${fillClass}" style="width:${fillW}%"></div></div>
+      <div style="display:flex;justify-content:space-between;margin-top:5px">
+        <div class="orc-pct">${pct.toFixed(0)}% utilizado</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:.68rem;color:${resto<0?'var(--red)':'var(--text2)'}">
+            ${resto>=0?'sobram '+fmt(resto):'excedeu '+fmt(Math.abs(resto))}
+          </span>
+          <button class="btn sm ghost" style="padding:2px 7px;font-size:.65rem" onclick="openOrcModal('${esc(id)}')">✏️</button>
+          <button class="btn sm danger" style="padding:2px 7px;font-size:.65rem" onclick="removeOrc('${esc(id)}')">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── ORÇAMENTO MODAL ──
+window.openOrcModal = (catId) => {
+  document.getElementById('o-cat').innerHTML = state.categories.map(c=>
+    `<option value="${esc(c.id)}">${esc(c.emoji)} ${esc(c.name)}</option>`
+  ).join('');
+  if (catId) document.getElementById('o-cat').value = catId;
+  document.getElementById('o-limit').value = catId && state.budgets?.[catId] ? state.budgets[catId] : '';
+  document.getElementById('orcModalBg').classList.add('open');
+};
+window.closeOrcModal   = () => document.getElementById('orcModalBg').classList.remove('open');
+window.closeOrcModalBg = e => { if(e.target.id==='orcModalBg') closeOrcModal(); };
+
+window.saveOrcamento = async () => {
+  const catId = document.getElementById('o-cat').value;
+  const limit = parseFloat(document.getElementById('o-limit').value);
+  if (!catId || isNaN(limit) || limit <= 0) { toast('Informe a categoria e um limite válido'); return; }
+  const btn = document.getElementById('orcSaveBtn');
+  btn.disabled=true; btn.textContent='Salvando...';
+  if (!state.budgets) state.budgets = {};
+  state.budgets[catId] = limit;
+  await saveSettings();
+  renderOrcamento();
+  closeOrcModal();
+  toast('Meta salva!');
+  btn.disabled=false; btn.textContent='Salvar';
+};
+
+window.removeOrc = async (catId) => {
+  if (!confirm('Remover meta desta categoria?')) return;
+  delete state.budgets[catId];
+  await saveSettings();
+  renderOrcamento();
+  toast('Meta removida');
+};
+
+// ── RECORRENTES VIEW ──
+function renderRecorrentes() {
+  const el = document.getElementById('recList');
+  if (!el) return;
+  if (!recorrentes.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🔁</div><p>Nenhuma recorrente cadastrada</p></div>';
+    return;
+  }
+  const now = new Date();
+  const curYM = now.getFullYear() * 12 + now.getMonth();
+  el.innerHTML = recorrentes.map(r => {
+    const cat = state.categories.find(c=>c.id===r.category)||{name:r.category||'—',emoji:'📦'};
+    const pn  = state.names[r.person||0]||'—';
+    let meta = '', progress = '';
+    if (r.kind === 'parcelada') {
+      const [sy, sm] = r.startYM.split('-').map(Number);
+      const startYM = sy * 12 + (sm - 1);
+      const done = Math.max(0, Math.min(r.parcelas, curYM - startYM + 1));
+      const pct  = (done / r.parcelas * 100).toFixed(0);
+      meta = `Parcelada · ${done}/${r.parcelas} pagas · início ${sm.toString().padStart(2,'0')}/${sy}`;
+      progress = `<div class="rec-progress"><div class="rec-progress-fill" style="width:${pct}%;background:var(--yellow)"></div></div>`;
+    } else {
+      const [sy, sm] = r.startYM.split('-').map(Number);
+      meta = `Fixa desde ${sm.toString().padStart(2,'0')}/${sy}` + (r.endYM ? ` até ${r.endYM.split('-')[1]}/${r.endYM.split('-')[0]}` : ' · sem término');
+    }
+    const badge = r.kind==='parcelada'
+      ? `<span class="badge yellow">💳 parcelada</span>`
+      : `<span class="badge orange">🔁 fixa</span>`;
+    return `<div class="rec-item">
+      <div class="rec-item-head">
+        <div class="rec-item-icon" style="background:rgba(251,146,60,.15)">${esc(cat.emoji)}</div>
+        <div class="rec-item-info">
+          <div class="rec-item-desc">${badge} ${esc(r.desc)}</div>
+          <div class="rec-item-meta">${meta} · dia ${r.day} · ${esc(pn)}</div>
+        </div>
+        <div class="rec-item-amount">-${fmt(r.value)}</div>
+        <button class="tx-del" onclick="deleteRec('${esc(r.id)}')" title="Excluir">🗑</button>
+      </div>
+      ${progress}
+    </div>`;
+  }).join('');
+}
+
+// ── RECORRENTE MODAL ──
+let recEditId = null, selectedRecType = 'fixa';
+
+window.openRecModal = (id) => {
+  recEditId = id || null;
+  selectedRecType = 'fixa';
+  // reset
+  ['r-desc','r-val','r-obs','r-day','r-parc-n'].forEach(x => { const el=document.getElementById(x); if(el) el.value=''; });
+  const now = new Date();
+  const ym  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  document.getElementById('r-start').value = ym;
+  document.getElementById('r-end').value   = '';
+  document.getElementById('r-parc-start').value = ym;
+  document.getElementById('r-parc-preview').textContent = '';
+  document.getElementById('r-cat').innerHTML    = state.categories.map(c=>`<option value="${esc(c.id)}">${esc(c.emoji)} ${esc(c.name)}</option>`).join('');
+  document.getElementById('r-person').innerHTML = state.names.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('');
+  // default category moradia for fixa
+  document.getElementById('r-cat').value = 'moradia';
+  selectRecType('fixa', document.getElementById('recTypeFixBtn'));
+  document.getElementById('recModalTitle').textContent = id ? 'Editar Recorrente' : 'Nova Recorrente / Parcelada';
+  document.getElementById('recModalBg').classList.add('open');
+};
+window.closeRecModal   = () => document.getElementById('recModalBg').classList.remove('open');
+window.closeRecModalBg = e => { if(e.target.id==='recModalBg') closeRecModal(); };
+
+window.selectRecType = (type, btn) => {
+  selectedRecType = type;
+  document.querySelectorAll('#recModalBg .type-btn').forEach(b => {
+    b.classList.remove('selected');
+    b.style.borderColor=''; b.style.color=''; b.style.background='';
+  });
+  if (btn) {
+    btn.classList.add('selected');
+    if (type==='fixa') { btn.style.borderColor='var(--orange)'; btn.style.color='var(--orange)'; btn.style.background='rgba(251,146,60,.1)'; }
+    else               { btn.style.borderColor='var(--yellow)'; btn.style.color='var(--yellow)'; btn.style.background='rgba(251,191,36,.1)'; }
+  }
+  document.getElementById('r-fixa-fields').style.display  = type==='fixa'?'block':'none';
+  document.getElementById('r-parc-fields').style.display  = type==='parcelada'?'block':'none';
+  document.getElementById('r-day-label').textContent = type==='parcelada'?'Dia de cada parcela *':'Dia do mês *';
+};
+
+// Live preview for parcelada
+document.getElementById('r-parc-n')?.addEventListener('input', updateParcPreview);
+document.getElementById('r-parc-start')?.addEventListener('input', updateParcPreview);
+document.getElementById('r-val')?.addEventListener('input', updateParcPreview);
+function updateParcPreview() {
+  const n   = parseInt(document.getElementById('r-parc-n').value);
+  const val = parseFloat(document.getElementById('r-val').value);
+  const ym  = document.getElementById('r-parc-start').value;
+  const el  = document.getElementById('r-parc-preview');
+  if (!el) return;
+  if (!n || !val || !ym) { el.textContent=''; return; }
+  const [y,m] = ym.split('-').map(Number);
+  const endM  = (m - 1 + n - 1) % 12;
+  const endY  = y + Math.floor((m - 1 + n - 1) / 12);
+  el.textContent = `${n}x de ${fmt(val)} · término em ${String(endM+1).padStart(2,'0')}/${endY} · total ${fmt(val*n)}`;
+}
+
+window.saveRecorrente = async () => {
+  const desc   = document.getElementById('r-desc').value.trim();
+  const val    = parseFloat(document.getElementById('r-val').value);
+  const day    = parseInt(document.getElementById('r-day').value);
+  const cat    = document.getElementById('r-cat').value;
+  const person = parseInt(document.getElementById('r-person').value);
+  const obs    = document.getElementById('r-obs').value.trim();
+  if (!desc||isNaN(val)||val<=0||!day||day<1||day>31) { toast('Preencha descrição, valor e dia'); return; }
+  let data = { desc, value:val, day, category:cat, person, obs, kind: selectedRecType };
+  if (selectedRecType === 'fixa') {
+    const start = document.getElementById('r-start').value;
+    const end   = document.getElementById('r-end').value;
+    if (!start) { toast('Informe o mês de início'); return; }
+    data.startYM = start;
+    data.endYM   = end || null;
+  } else {
+    const start = document.getElementById('r-parc-start').value;
+    const n     = parseInt(document.getElementById('r-parc-n').value);
+    if (!start||!n||n<2) { toast('Informe mês inicial e nº de parcelas (mín. 2)'); return; }
+    data.startYM  = start;
+    data.parcelas = n;
+  }
+  const btn = document.getElementById('recSaveBtn');
+  btn.disabled=true; btn.textContent='Salvando...';
+  try {
+    if (recEditId) { await updateDoc(recRef(recEditId), {...data, updatedAt:serverTimestamp()}); recEditId=null; }
+    else           { await addDoc(recCol(), {...data, createdAt:serverTimestamp()}); }
+    closeRecModal(); toast('Recorrente salva!');
+  } catch { toast('Erro ao salvar'); }
+  btn.disabled=false; btn.textContent='Salvar';
+};
+
+window.deleteRec = async id => {
+  if (!confirm('Excluir esta recorrente? Ela deixará de aparecer em todos os meses.')) return;
+  try { await deleteDoc(recRef(id)); toast('Recorrente removida'); }
   catch { toast('Erro ao remover'); }
 };
 
