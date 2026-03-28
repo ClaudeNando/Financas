@@ -706,7 +706,7 @@ function txCard(t, selectable = false) {
   </div>`;
 }
 
-function renderTransactions() {
+window.renderTransactions = function renderTransactions() {
   const searchEl = document.getElementById('txSearch');
   const query    = searchEl ? searchEl.value.trim().toLowerCase() : '';
   const clearBtn = document.getElementById('searchClear');
