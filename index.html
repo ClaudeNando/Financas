@@ -299,15 +299,6 @@
       </div>
 
       <div class="tx-list" id="fullList"></div>
-
-      <!-- DESPESAS DO MÊS -->
-      <div style="margin-top:20px">
-        <div class="section-head">
-          <h2>Despesas do Mês</h2>
-          <span id="despTotal" style="font-family:'JetBrains Mono',monospace;font-size:.85rem;color:var(--red)"></span>
-        </div>
-        <div class="tx-list" id="despList"></div>
-      </div>
     </div>
 
     <!-- CATEGORIAS -->
@@ -621,10 +612,17 @@ const fmt = v => 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
 // ── RENDER ──
+let currentView = 'dashboard';
 function renderAll() {
   document.getElementById('monthLabel').textContent = MONTHS[currentMonth]+' '+currentYear;
-  renderDashboard(); renderTransactions(); renderCategories(); renderConfig();
-  renderRecorrentes(); renderHistChart(); renderOrcamento(); renderDespesas();
+  switch (currentView) {
+    case 'dashboard':   renderDashboard(); renderHistChart(); break;
+    case 'lancamentos': renderTransactions(); break;
+    case 'orcamento':   renderOrcamento(); break;
+    case 'categorias':  renderCategories(); break;
+    case 'pessoas':     renderPeople(); break;
+    case 'config':      renderConfig(); break;
+  }
 }
 
 function renderDashboard() {
@@ -712,11 +710,8 @@ window.renderTransactions = function renderTransactions() {
   const clearBtn = document.getElementById('searchClear');
   if (clearBtn) clearBtn.style.display = query ? 'block' : 'none';
 
-  // Tags show only real (manual) transactions — no virtual recorrentes mixed in
-  let txs = transactions.filter(t => {
-    const dt = new Date(t.date+'T12:00:00');
-    return dt.getMonth()===currentMonth && dt.getFullYear()===currentYear;
-  }).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  // Inclui lançamentos manuais + recorrentes virtuais do mês
+  let txs = getTx().sort((a,b)=>new Date(b.date)-new Date(a.date));
 
   if (txFilter!=='all') txs = txs.filter(t=>t.type===txFilter);
 
@@ -735,7 +730,6 @@ window.renderTransactions = function renderTransactions() {
     ? txs.map(t=>txCard(t, true)).join('')
     : `<div class="empty"><div class="empty-icon">${emptyIcon}</div><p>${emptyMsg}</p></div>`;
   updateSelTotal();
-  renderDespesas();
 }
 
 window.clearSearch = () => {
@@ -743,22 +737,6 @@ window.clearSearch = () => {
   if (el) { el.value = ''; el.focus(); }
   renderTransactions();
 };
-
-function renderDespesas() {
-  // All expenses this month: manual debit+card + virtual recorrentes
-  const allTxs = getTx();
-  const despesas = allTxs
-    .filter(t => t.type==='debit' || t.type==='card' || t.type==='recorrente')
-    .sort((a,b) => new Date(b.date)-new Date(a.date));
-  const total = despesas.reduce((s,t)=>s+t.value, 0);
-  const el = document.getElementById('despList');
-  const te = document.getElementById('despTotal');
-  if (te) te.textContent = fmt(total);
-  if (!el) return;
-  el.innerHTML = despesas.length
-    ? despesas.map(t=>txCard(t, false)).join('')
-    : '<div class="empty"><div class="empty-icon">💸</div><p>Sem despesas este mês</p></div>';
-}
 
 window.toggleSelect = (id, value) => {
   if (selectedIds.has(id)) selectedIds.delete(id);
@@ -869,7 +847,7 @@ function renderConfig() {
   document.getElementById('name1').value = state.names[0]||'';
   document.getElementById('name2').value = state.names[1]||'';
   document.getElementById('catConfigList').innerHTML = state.categories.map((c,i) => {
-    const delBtn = i>=10 ? '<button class="btn danger sm" onclick="removeCat(\'' + esc(c.id) + '\')">✕</button>' : '';
+    const delBtn = c.id.startsWith('c_') ? '<button class="btn danger sm" onclick="removeCat(\'' + esc(c.id) + '\')">✕</button>' : '';
     return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border)">
       <span>${esc(c.emoji)}</span>
       <span style="flex:1;font-size:.84rem">${esc(c.name)}</span>
@@ -1325,8 +1303,8 @@ window.showView = (name, btn) => {
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   btn.classList.add('active');
-  if (name==='pessoas') renderPeople();
-  if (name==='orcamento') renderOrcamento();
+  currentView = name;
+  renderAll();
 };
 
 window.exportData = () => {
@@ -1345,12 +1323,16 @@ window.importData  = async e => {
       if(d.names)      state.names=d.names;
       if(d.categories) state.categories=d.categories.map((c,i)=>({...c,id:c.id||'cat'+i}));
       await saveSettings();
-      let n=0;
+      const key = t => `${t.desc}|${t.date}|${t.value}|${t.type}`;
+      const existentes = new Set(transactions.map(key));
+      let n=0, pulados=0;
       for(const tx of d.transactions){
         const {id,createdAt,...rest}=tx;
+        if (existentes.has(key(rest))) { pulados++; continue; }
+        existentes.add(key(rest));
         await addDoc(txCol(),{...rest,createdAt:serverTimestamp()}); n++;
       }
-      toast(`${n} lançamentos importados!`);
+      toast(`${n} importados${pulados?` · ${pulados} já existiam`:''}`);
     } catch(err){ toast('Erro: '+err.message); }
     e.target.value='';
   };
