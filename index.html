@@ -55,7 +55,7 @@
     .card{background:var(--surface);border-radius:var(--radius);padding:16px;border:1px solid var(--border)}
     .card-label{font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px}
     .card-value{font-family:'JetBrains Mono',monospace;font-size:1.2rem;font-weight:500}
-    .card-value.green{color:var(--green)}.card-value.red{color:var(--red)}.card-value.blue{color:var(--blue)}
+    .card-value.green{color:var(--green)}.card-value.red{color:var(--red)}.card-value.blue{color:var(--blue)}.card-value.yellow{color:var(--yellow)}
     .card-sub{font-size:.7rem;color:var(--text2);margin-top:3px}
 
     /* BARS */
@@ -237,10 +237,10 @@
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view active">
       <div class="grid-4">
-        <div class="card"><div class="card-label">Caixa do Mês</div><div class="card-value" id="d-saldo">R$ 0</div><div class="card-sub" id="d-saldo-sub"></div></div>
         <div class="card"><div class="card-label">Receitas</div><div class="card-value green" id="d-receitas">R$ 0</div><div class="card-sub" id="d-rec-sub"></div></div>
-        <div class="card"><div class="card-label">Despesas</div><div class="card-value red" id="d-despesas">R$ 0</div><div class="card-sub" id="d-desp-sub"></div></div>
-        <div class="card"><div class="card-label">Investimentos</div><div class="card-value blue" id="d-invest">R$ 0</div><div class="card-sub" id="d-inv-sub"></div></div>
+        <div class="card"><div class="card-label">Gastos em Dinheiro</div><div class="card-value red" id="d-dinheiro">R$ 0</div><div class="card-sub" id="d-dinheiro-sub"></div></div>
+        <div class="card"><div class="card-label">A Pagar no Cartão</div><div class="card-value yellow" id="d-cartao">R$ 0</div><div class="card-sub" id="d-cartao-sub"></div></div>
+        <div class="card"><div class="card-label">Caixa do Mês</div><div class="card-value" id="d-caixa">R$ 0</div><div class="card-sub" id="d-caixa-sub"></div></div>
       </div>
       <div class="balance-bar"><h3>Distribuição por Categoria</h3><div class="bar-wrap" id="catBars"></div></div>
 
@@ -656,23 +656,26 @@ function renderAll() {
 function renderDashboard() {
   const txs = getTx();
   const rec  = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
-  const desp = txs.filter(isDespesa).reduce((s,t)=>s+t.value,0);
   const inv  = txs.filter(t=>t.type==='invest').reduce((s,t)=>s+t.value,0);
-  const saidaCaixa = txs.filter(saiCaixa).reduce((s,t)=>s+t.value,0); // à vista + invest + fatura
-  const caixa = rec - saidaCaixa;
-  const $    = id => document.getElementById(id);
-  $('d-saldo').textContent = fmt(caixa);
-  $('d-saldo').className   = 'card-value '+(caixa>=0?'green':'red');
-  $('d-saldo-sub').textContent = 'movimento de caixa no mês';
-  $('d-receitas').textContent  = fmt(rec);
-  $('d-despesas').textContent  = fmt(desp);
-  $('d-invest').textContent    = fmt(inv);
   const aVista = txs.filter(t=>isDespesa(t)&&txMethod(t)==='caixa').reduce((s,t)=>s+t.value,0);
   const cartao = txs.filter(isCartao).reduce((s,t)=>s+t.value,0);
   const fatPg  = txs.filter(t=>t.type==='fatura').reduce((s,t)=>s+t.value,0);
-  $('d-desp-sub').textContent = `À vista: ${fmt(aVista)} · Cartão: ${fmt(cartao)}`;
-  $('d-rec-sub').textContent  = `Fatura paga: ${fmt(fatPg)}`;
-  $('d-inv-sub').textContent  = txs.filter(t=>t.type==='invest').length+' aplicação(ões)';
+  const saidaCaixa = aVista + inv + fatPg;
+  const caixa = rec - saidaCaixa;
+  const $    = id => document.getElementById(id);
+
+  $('d-receitas').textContent     = fmt(rec);
+  $('d-rec-sub').textContent      = txs.filter(t=>t.type==='credit').length + ' entrada(s)';
+
+  $('d-dinheiro').textContent     = fmt(aVista);
+  $('d-dinheiro-sub').textContent = 'saiu do caixa (pix/dinheiro)';
+
+  $('d-cartao').textContent       = fmt(cartao);
+  $('d-cartao-sub').textContent   = 'fatura deste mês';
+
+  $('d-caixa').textContent        = fmt(caixa);
+  $('d-caixa').className          = 'card-value '+(caixa>=0?'green':'red');
+  $('d-caixa-sub').textContent    = `Invest: ${fmt(inv)} · Fatura paga: ${fmt(fatPg)}`;
 
   const catT = {};
   txs.filter(t=>isDespesa(t) && t.category!=='salario')
