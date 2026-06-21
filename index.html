@@ -57,6 +57,8 @@
     .card-value{font-family:'JetBrains Mono',monospace;font-size:1.2rem;font-weight:500}
     .card-value.green{color:var(--green)}.card-value.red{color:var(--red)}.card-value.blue{color:var(--blue)}.card-value.yellow{color:var(--yellow)}
     .card-sub{font-size:.7rem;color:var(--text2);margin-top:3px}
+    .card.clickable{cursor:pointer;transition:border-color .15s,transform .15s}
+    .card.clickable:hover{border-color:var(--accent);transform:translateY(-1px)}
 
     /* BARS */
     .balance-bar{background:var(--surface);border-radius:var(--radius);padding:18px;margin-bottom:16px;border:1px solid var(--border)}
@@ -238,8 +240,8 @@
     <div id="view-dashboard" class="view active">
       <div class="grid-4">
         <div class="card"><div class="card-label">Receitas</div><div class="card-value green" id="d-receitas">R$ 0</div><div class="card-sub" id="d-rec-sub"></div></div>
-        <div class="card"><div class="card-label">Gastos em Dinheiro</div><div class="card-value red" id="d-dinheiro">R$ 0</div><div class="card-sub" id="d-dinheiro-sub"></div></div>
-        <div class="card"><div class="card-label">A Pagar no Cartão</div><div class="card-value yellow" id="d-cartao">R$ 0</div><div class="card-sub" id="d-cartao-sub"></div></div>
+        <div class="card clickable" onclick="openCardList('debit')" title="Ver lançamentos"><div class="card-label">Gastos em Dinheiro 🔍</div><div class="card-value red" id="d-dinheiro">R$ 0</div><div class="card-sub" id="d-dinheiro-sub"></div></div>
+        <div class="card clickable" onclick="openCardList('card')" title="Ver lançamentos"><div class="card-label">A Pagar no Cartão 🔍</div><div class="card-value yellow" id="d-cartao">R$ 0</div><div class="card-sub" id="d-cartao-sub"></div></div>
         <div class="card"><div class="card-label">Caixa do Mês</div><div class="card-value" id="d-caixa">R$ 0</div><div class="card-sub" id="d-caixa-sub"></div></div>
       </div>
       <div class="balance-bar"><h3>Distribuição por Categoria</h3><div class="bar-wrap" id="catBars"></div></div>
@@ -278,12 +280,12 @@
         </div>
       </div>
       <div class="filters" id="txFilters">
-        <button class="filter-btn active" onclick="setFilter('all',this)">Todos</button>
-        <button class="filter-btn" onclick="setFilter('credit',this)">✅ Receitas</button>
-        <button class="filter-btn" onclick="setFilter('debit',this)">💸 Despesas</button>
-        <button class="filter-btn" onclick="setFilter('invest',this)">📈 Invest.</button>
-        <button class="filter-btn" onclick="setFilter('card',this)">💳 Cartão</button>
-        <button class="filter-btn" onclick="setFilter('recorrente',this)">🔁 Recorr.</button>
+        <button class="filter-btn active" data-f="all" onclick="setFilter('all',this)">Todos</button>
+        <button class="filter-btn" data-f="credit" onclick="setFilter('credit',this)">✅ Receitas</button>
+        <button class="filter-btn" data-f="debit" onclick="setFilter('debit',this)">💵 Dinheiro</button>
+        <button class="filter-btn" data-f="card" onclick="setFilter('card',this)">💳 Cartão</button>
+        <button class="filter-btn" data-f="invest" onclick="setFilter('invest',this)">📈 Invest.</button>
+        <button class="filter-btn" data-f="recorrente" onclick="setFilter('recorrente',this)">🔁 Recorr.</button>
       </div>
 
       <!-- BUSCA POR NOME -->
@@ -746,7 +748,7 @@ window.renderTransactions = function renderTransactions() {
   let txs = getTx().sort((a,b)=>new Date(b.date)-new Date(a.date));
 
   if (txFilter==='card')      txs = txs.filter(isCartao);
-  else if (txFilter==='debit') txs = txs.filter(t=>t.type==='debit' && txMethod(t)==='caixa');
+  else if (txFilter==='debit') txs = txs.filter(t=>isDespesa(t) && txMethod(t)==='caixa');
   else if (txFilter!=='all')   txs = txs.filter(t=>t.type===txFilter);
 
   // apply search
@@ -809,7 +811,8 @@ window.setFilter = (f,btn) => {
   const el = document.getElementById('txSearch');
   if (el) el.value = '';
   document.querySelectorAll('#txFilters .filter-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
+  const target = btn || document.querySelector(`#txFilters .filter-btn[data-f="${f}"]`);
+  if (target) target.classList.add('active');
   renderTransactions();
 };
 
@@ -1345,9 +1348,15 @@ window.showView = (name, btn) => {
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
-  btn.classList.add('active');
+  const tab = btn || [...document.querySelectorAll('.tab')].find(b=>(b.getAttribute('onclick')||'').includes(`'${name}'`));
+  if (tab) tab.classList.add('active');
   currentView = name;
   renderAll();
+};
+
+window.openCardList = (f) => {
+  showView('lancamentos', null);
+  setFilter(f, null);
 };
 
 window.exportData = () => {
