@@ -112,6 +112,9 @@
     .type-btn.selected.debit{border-color:var(--red);color:var(--red);background:rgba(248,113,113,.1)}
     .type-btn.selected.card{border-color:var(--yellow);color:var(--yellow);background:rgba(251,191,36,.1)}
     .type-btn.selected.invest{border-color:var(--blue);color:var(--blue);background:rgba(96,165,250,.1)}
+    .type-btn.selected.fatura{border-color:var(--blue);color:var(--blue);background:rgba(96,165,250,.1)}
+    .type-btn.selected.metcaixa{border-color:var(--green);color:var(--green);background:rgba(52,211,153,.1)}
+    .type-btn.selected.metcartao{border-color:var(--yellow);color:var(--yellow);background:rgba(251,191,36,.1)}
 
     /* CATS */
     .budget-cat{background:var(--surface);border-radius:var(--radius);padding:14px;margin-bottom:9px;border:1px solid var(--border)}
@@ -234,7 +237,7 @@
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view active">
       <div class="grid-4">
-        <div class="card"><div class="card-label">Saldo do Mês</div><div class="card-value" id="d-saldo">R$ 0</div><div class="card-sub" id="d-saldo-sub"></div></div>
+        <div class="card"><div class="card-label">Caixa do Mês</div><div class="card-value" id="d-saldo">R$ 0</div><div class="card-sub" id="d-saldo-sub"></div></div>
         <div class="card"><div class="card-label">Receitas</div><div class="card-value green" id="d-receitas">R$ 0</div><div class="card-sub" id="d-rec-sub"></div></div>
         <div class="card"><div class="card-label">Despesas</div><div class="card-value red" id="d-despesas">R$ 0</div><div class="card-sub" id="d-desp-sub"></div></div>
         <div class="card"><div class="card-label">Investimentos</div><div class="card-value blue" id="d-invest">R$ 0</div><div class="card-sub" id="d-inv-sub"></div></div>
@@ -363,11 +366,21 @@
     <div class="type-toggle">
       <button class="type-btn selected credit" onclick="selectType('credit',this)">✅ Receita</button>
       <button class="type-btn" onclick="selectType('debit',this)">💸 Despesa</button>
-      <button class="type-btn" onclick="selectType('card',this)">💳 Cartão</button>
       <button class="type-btn" onclick="selectType('invest',this)">📈 Invest.</button>
+      <button class="type-btn" onclick="selectType('fatura',this)">💳 Fatura</button>
+    </div>
+    <div id="form-forma" style="display:none">
+      <label>Forma de pagamento</label>
+      <div class="type-toggle">
+        <button class="type-btn selected metcaixa" id="metCaixaBtn" onclick="selectMethod('caixa',this)">💵 Caixa (pix/dinheiro)</button>
+        <button class="type-btn" id="metCartaoBtn" onclick="selectMethod('cartao',this)">💳 Cartão</button>
+      </div>
+    </div>
+    <div id="fatura-hint" style="display:none;font-size:.73rem;color:var(--blue);background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:12px">
+      💡 Pagamento de fatura: <strong>sai do caixa</strong> e <strong>não conta como despesa nova</strong> (as compras já entraram quando foram feitas no cartão).
     </div>
     <div id="card-hint" style="display:none;font-size:.73rem;color:var(--yellow);background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:12px">
-      💡 Para compras parceladas use a aba <strong>🔁 Recorr.</strong> — ela distribui automaticamente as parcelas nos meses seguintes.
+      💡 Compra parcelada no cartão? Use a aba <strong>🔁 Recorrente → Parcelada</strong> para distribuir as parcelas automaticamente.
     </div>
     <div class="form-group"><label>Descrição *</label><input id="f-desc" type="text" placeholder="Ex: Salário, Aluguel, Mercado..." /></div>
     <div class="form-row">
@@ -414,6 +427,11 @@
     </div>
 
     <div class="form-group"><label>Descrição *</label><input id="r-desc" type="text" placeholder="Ex: Financiamento, Netflix..." /></div>
+    <label>Forma de pagamento</label>
+    <div class="type-toggle">
+      <button class="type-btn selected metcaixa" id="rMetCaixaBtn" onclick="selectRecMethod('caixa',this)">💵 Caixa</button>
+      <button class="type-btn" id="rMetCartaoBtn" onclick="selectRecMethod('cartao',this)">💳 Cartão</button>
+    </div>
     <div class="form-row">
       <div class="form-group"><label>Valor (R$) *</label><input id="r-val" type="number" step="0.01" min="0" placeholder="0,00" /></div>
       <div class="form-group"><label id="r-day-label">Dia do mês *</label><input id="r-day" type="number" min="1" max="31" placeholder="Ex: 10" /></div>
@@ -498,7 +516,7 @@ let unsub = null, unsubRec = null;
 let currentMonth = new Date().getMonth();
 let currentYear  = new Date().getFullYear();
 let txFilter = 'all', personFilter = 'all';
-let editId = null, selectedType = 'credit';
+let editId = null, selectedType = 'credit', selectedMethod = 'caixa';
 const selectedIds = new Set();
 
 // ── SYNC DOT ──
@@ -567,6 +585,7 @@ function getRecorrentesForMonth(m, y) {
           person: r.person,
           obs: r.obs,
           type: 'recorrente',
+          method: r.method || 'caixa',
           isRecorrente: true,
           recKind: 'fixa'
         });
@@ -589,6 +608,7 @@ function getRecorrentesForMonth(m, y) {
           person: r.person,
           obs: r.obs,
           type: 'recorrente',
+          method: r.method || 'cartao',
           isRecorrente: true,
           recKind: 'parcelada',
           parcAtual,
@@ -611,6 +631,14 @@ function getTx() {
 const fmt = v => 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
+// ── REGRAS CAIXA × DESPESA ──
+// method: 'caixa' (pix/dinheiro/débito) ou 'cartao'. Lançamentos antigos type==='card' = cartão.
+const txMethod  = t => t.method || (t.type==='card' ? 'cartao' : 'caixa');
+const isDespesa = t => t.type==='debit' || t.type==='card' || t.type==='recorrente';
+// sai do dinheiro em caixa: invest, pagamento de fatura e despesas à vista
+const saiCaixa  = t => t.type==='invest' || t.type==='fatura' || (isDespesa(t) && txMethod(t)==='caixa');
+const isCartao  = t => isDespesa(t) && txMethod(t)==='cartao';
+
 // ── RENDER ──
 let currentView = 'dashboard';
 function renderAll() {
@@ -628,25 +656,26 @@ function renderAll() {
 function renderDashboard() {
   const txs = getTx();
   const rec  = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
-  const desp = txs.filter(t=>t.type==='debit'||t.type==='card'||t.type==='recorrente').reduce((s,t)=>s+t.value,0);
+  const desp = txs.filter(isDespesa).reduce((s,t)=>s+t.value,0);
   const inv  = txs.filter(t=>t.type==='invest').reduce((s,t)=>s+t.value,0);
-  const sal  = rec - desp - inv;
+  const saidaCaixa = txs.filter(saiCaixa).reduce((s,t)=>s+t.value,0); // à vista + invest + fatura
+  const caixa = rec - saidaCaixa;
   const $    = id => document.getElementById(id);
-  $('d-saldo').textContent = fmt(sal);
-  $('d-saldo').className   = 'card-value '+(sal>=0?'green':'red');
-  $('d-saldo-sub').textContent = sal>=0?'✓ Positivo':'⚠ Negativo';
+  $('d-saldo').textContent = fmt(caixa);
+  $('d-saldo').className   = 'card-value '+(caixa>=0?'green':'red');
+  $('d-saldo-sub').textContent = 'movimento de caixa no mês';
   $('d-receitas').textContent  = fmt(rec);
   $('d-despesas').textContent  = fmt(desp);
   $('d-invest').textContent    = fmt(inv);
-  const fix = txs.filter(t=>t.type==='debit').reduce((s,t)=>s+t.value,0);
-  const crd = txs.filter(t=>t.type==='card').reduce((s,t)=>s+t.value,0);
-  const rcc = txs.filter(t=>t.type==='recorrente').reduce((s,t)=>s+t.value,0);
-  $('d-desp-sub').textContent = `Fixo: ${fmt(fix)} · Cartão: ${fmt(crd)} · Rec: ${fmt(rcc)}`;
-  $('d-rec-sub').textContent  = txs.filter(t=>t.type==='credit').length+' lançamento(s)';
+  const aVista = txs.filter(t=>isDespesa(t)&&txMethod(t)==='caixa').reduce((s,t)=>s+t.value,0);
+  const cartao = txs.filter(isCartao).reduce((s,t)=>s+t.value,0);
+  const fatPg  = txs.filter(t=>t.type==='fatura').reduce((s,t)=>s+t.value,0);
+  $('d-desp-sub').textContent = `À vista: ${fmt(aVista)} · Cartão: ${fmt(cartao)}`;
+  $('d-rec-sub').textContent  = `Fatura paga: ${fmt(fatPg)}`;
   $('d-inv-sub').textContent  = txs.filter(t=>t.type==='invest').length+' aplicação(ões)';
 
   const catT = {};
-  txs.filter(t=>(t.type==='debit'||t.type==='card'||t.type==='recorrente') && t.category!=='salario')
+  txs.filter(t=>isDespesa(t) && t.category!=='salario')
     .forEach(t=>{ catT[t.category]=(catT[t.category]||0)+t.value; });
   const sorted = Object.entries(catT).sort((a,b)=>b[1]-a[1]).slice(0,6);
   const maxV   = sorted[0]?.[1]||1;
@@ -713,7 +742,9 @@ window.renderTransactions = function renderTransactions() {
   // Inclui lançamentos manuais + recorrentes virtuais do mês
   let txs = getTx().sort((a,b)=>new Date(b.date)-new Date(a.date));
 
-  if (txFilter!=='all') txs = txs.filter(t=>t.type===txFilter);
+  if (txFilter==='card')      txs = txs.filter(isCartao);
+  else if (txFilter==='debit') txs = txs.filter(t=>t.type==='debit' && txMethod(t)==='caixa');
+  else if (txFilter!=='all')   txs = txs.filter(t=>t.type===txFilter);
 
   // apply search
   if (query) {
@@ -780,7 +811,7 @@ window.setFilter = (f,btn) => {
 };
 
 function renderCategories() {
-  const txs = getTx().filter(t=>(t.type==='debit'||t.type==='card'||t.type==='recorrente') && t.category!=='salario');
+  const txs = getTx().filter(t=>isDespesa(t) && t.category!=='salario');
   const tot = txs.reduce((s,t)=>s+t.value,0);
   const ct  = {};
   txs.forEach(t=>{ct[t.category]=(ct[t.category]||0)+t.value;});
@@ -815,7 +846,7 @@ function renderPeople() {
   document.getElementById('peopleCards').innerHTML = state.names.map((name,idx)=>{
     const pt = txs.filter(t=>(t.person||0)==idx);
     const inc = pt.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
-    const sp  = pt.filter(t=>t.type==='debit'||t.type==='card'||t.type==='recorrente').reduce((s,t)=>s+t.value,0);
+    const sp  = pt.filter(t=>isDespesa(t)).reduce((s,t)=>s+t.value,0);
     return `<div class="person-card">
       <div class="person-avatar" style="background:${idx===0?'rgba(124,106,247,.2)':'rgba(244,114,182,.2)'}">${idx===0?'👨':'👩'}</div>
       <div class="person-name">${esc(name)}</div>
@@ -889,11 +920,10 @@ window.openModal = id => {
   document.getElementById('f-obs').value='';
   document.getElementById('f-cat').innerHTML = state.categories.map(c=>`<option value="${esc(c.id)}">${esc(c.emoji)} ${esc(c.name)}</option>`).join('');
   document.getElementById('f-person').innerHTML = state.names.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('');
-  // reset type buttons — scope to main modal only
-  document.querySelectorAll('#modalBg .type-btn').forEach(b=>b.classList.remove('selected','credit','debit','card','invest'));
-  document.querySelectorAll('#modalBg .type-btn')[0].classList.add('selected','credit');
-  const hint = document.getElementById('card-hint');
-  if (hint) hint.style.display = 'none';
+  // reset
+  selectedType='credit'; selectedMethod='caixa';
+  selectMethod('caixa', document.getElementById('metCaixaBtn'));
+  selectType('credit', null, true);
   if (id) {
     const t = transactions.find(x=>x.id===id);
     if (t) {
@@ -903,30 +933,19 @@ window.openModal = id => {
       document.getElementById('f-obs').value=t.obs||'';
       document.getElementById('f-cat').value=t.category;
       document.getElementById('f-person').value=t.person||0;
-      selectType(t.type,null,true);
+      // migra lançamentos antigos type==='card' → despesa no cartão
+      let tType = t.type, tMethod = txMethod(t);
+      if (tType==='card') tType='debit';
+      selectMethod(tMethod, document.getElementById(tMethod==='cartao'?'metCartaoBtn':'metCaixaBtn'));
+      selectType(tType,null,true);
     }
     document.getElementById('modalTitle').textContent='Editar Lançamento';
   } else {
     document.getElementById('modalTitle').textContent='Novo Lançamento';
-  }
-  // Show/hide type buttons based on current filter context
-  const allTypeBtns = document.querySelectorAll('#modalBg .type-btn');
-  allTypeBtns.forEach(b => b.style.display = 'flex');
-  if (txFilter === 'debit' || txFilter === 'card' || txFilter === 'recorrente') {
-    // hide Receita button (index 0) when in expense context
-    allTypeBtns[0].style.display = 'none';
-    // pre-select correct type
-    if (!id) {
-      const defaultType = txFilter === 'card' ? 'card' : txFilter === 'invest' ? 'invest' : 'debit';
-      document.querySelectorAll('#modalBg .type-btn').forEach(b=>b.classList.remove('selected','credit','debit','card','invest'));
-      selectType(defaultType, null, false);
-    }
-  } else if (txFilter === 'invest') {
-    // hide Receita and pre-select invest
-    if (!id) {
-      document.querySelectorAll('#modalBg .type-btn').forEach(b=>b.classList.remove('selected','credit','debit','card','invest'));
-      selectType('invest', null, false);
-    }
+    // pré-seleciona tipo conforme filtro atual
+    if (txFilter==='invest') selectType('invest', null, false);
+    else if (txFilter==='card') { selectType('debit', null, false); selectMethod('cartao', document.getElementById('metCartaoBtn')); }
+    else if (txFilter==='debit' || txFilter==='recorrente') selectType('debit', null, false);
   }
   document.getElementById('modalBg').classList.add('open');
 };
@@ -935,17 +954,26 @@ window.closeModalBg = e => { if(e.target.id==='modalBg') closeModal(); };
 
 window.selectType = (type, btn, silent) => {
   selectedType = type;
-  document.querySelectorAll('.type-btn').forEach(b=>b.classList.remove('selected','credit','debit','card','invest'));
-  if (btn) { btn.classList.add('selected',type); }
+  const order = ['credit','debit','invest','fatura'];
+  document.querySelectorAll('#modalBg .type-toggle:first-of-type .type-btn').forEach(b=>b.classList.remove('selected','credit','debit','invest','fatura'));
+  if (btn && btn.closest('.type-toggle')) { btn.classList.add('selected',type); }
   else {
-    const idx=['credit','debit','card','invest'].indexOf(type);
-    const btns=document.querySelectorAll('#modalBg .type-btn');
-    if(idx>=0&&btns[idx]) btns[idx].classList.add('selected',type);
+    const idx = order.indexOf(type);
+    const btns = document.querySelectorAll('#modalBg .type-toggle:first-of-type .type-btn');
+    if (idx>=0 && btns[idx]) btns[idx].classList.add('selected',type);
   }
-  // show hint for card type
-  const hint = document.getElementById('card-hint');
-  if (hint) hint.style.display = type==='card' ? 'block' : 'none';
-  if(type==='credit'&&!silent) document.getElementById('f-cat').value='salario';
+  // Forma só para Despesa
+  document.getElementById('form-forma').style.display  = type==='debit' ? 'block' : 'none';
+  document.getElementById('fatura-hint').style.display = type==='fatura' ? 'block' : 'none';
+  document.getElementById('card-hint').style.display   = (type==='debit' && selectedMethod==='cartao') ? 'block' : 'none';
+  if (type==='credit' && !silent) document.getElementById('f-cat').value='salario';
+};
+
+window.selectMethod = (m, btn) => {
+  selectedMethod = m;
+  document.querySelectorAll('#form-forma .type-btn').forEach(b=>b.classList.remove('selected','metcaixa','metcartao'));
+  if (btn) btn.classList.add('selected', m==='caixa'?'metcaixa':'metcartao');
+  document.getElementById('card-hint').style.display = (selectedType==='debit' && m==='cartao') ? 'block' : 'none';
 };
 
 window.saveTransaction = async () => {
@@ -959,6 +987,7 @@ window.saveTransaction = async () => {
   const btn = document.getElementById('saveBtn');
   btn.disabled=true; btn.textContent='Salvando...';
   const tx = {desc, value:val, date, category, person, obs, type:selectedType};
+  tx.method = (selectedType==='debit') ? selectedMethod : 'caixa';
   try {
     if(editId) { await updateDoc(txRef(editId),{...tx, updatedAt:serverTimestamp()}); editId=null; }
     else { await addDoc(txCol(),{...tx, createdAt:serverTimestamp()}); }
@@ -989,9 +1018,10 @@ function renderHistChart() {
       ...getRecorrentesForMonth(m, y)
     ];
     const rec  = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
-    const desp = txs.filter(t=>t.type==='debit'||t.type==='card'||t.type==='recorrente').reduce((s,t)=>s+t.value,0);
+    const desp = txs.filter(t=>isDespesa(t)).reduce((s,t)=>s+t.value,0);
     const inv  = txs.filter(t=>t.type==='invest').reduce((s,t)=>s+t.value,0);
-    return {label, rec, desp, inv, saldo: rec - desp - inv};
+    const saidaCaixa = txs.filter(saiCaixa).reduce((s,t)=>s+t.value,0);
+    return {label, rec, desp, inv, saldo: rec - saidaCaixa};
   });
   const maxVal = Math.max(...data.flatMap(d=>[d.rec, d.desp, d.inv]), 1);
   const isCur  = (i) => months[i].m === currentMonth && months[i].y === currentYear;
@@ -1017,7 +1047,7 @@ function renderHistChart() {
 function renderOrcamento() {
   const el = document.getElementById('orcList');
   if (!el) return;
-  const txs = getTx().filter(t=>(t.type==='debit'||t.type==='card'||t.type==='recorrente') && t.category!=='salario');
+  const txs = getTx().filter(t=>isDespesa(t) && t.category!=='salario');
   const budgets = state.budgets || {};
   // categories with either a budget or spending this month
   const catSpent = {};
@@ -1039,7 +1069,7 @@ function renderOrcamento() {
     if (b.pct===null && a.pct!==null) return -1;
     return (b.pct||0) - (a.pct||0);
   });
-  const allTxs = getTx().filter(t=>(t.type==='debit'||t.type==='card'||t.type==='recorrente') && t.category!=='salario');
+  const allTxs = getTx().filter(t=>isDespesa(t) && t.category!=='salario');
 
   el.innerHTML = rows.map(({id, cat, spent, limit, pct}) => {
     const catTxs = allTxs.filter(t=>t.category===id).sort((a,b)=>new Date(b.date)-new Date(a.date));
@@ -1150,6 +1180,7 @@ function renderRecorrentes() {
       const endStr = r.endYM ? (' até ' + r.endYM.split('-')[1] + '/' + r.endYM.split('-')[0]) : ' · sem término';
       meta = 'Desde ' + startStr + endStr;
     }
+    const formaTxt = (r.method || (r.kind==='parcelada'?'cartao':'caixa'))==='cartao' ? '💳 cartão' : '💵 caixa';
     const badge = r.kind==='parcelada'
       ? `<span class="badge yellow">💳 parcelada</span>`
       : `<span class="badge orange">🔁 fixa</span>`;
@@ -1158,7 +1189,7 @@ function renderRecorrentes() {
         <div class="rec-item-icon" style="background:rgba(251,146,60,.15)">${esc(cat.emoji)}</div>
         <div class="rec-item-info">
           <div class="rec-item-desc">${badge} ${esc(r.desc)}</div>
-          <div class="rec-item-meta">${meta} · dia ${r.day} · ${esc(pn)}</div>
+          <div class="rec-item-meta">${meta} · dia ${r.day} · ${formaTxt} · ${esc(pn)}</div>
         </div>
         <div class="rec-item-amount">-${fmt(r.value)}</div>
         <button class="tx-del" onclick="openRecModal('${esc(r.id)}')" title="Editar" style="font-size:.8rem">✏️</button>
@@ -1170,7 +1201,13 @@ function renderRecorrentes() {
 }
 
 // ── RECORRENTE MODAL ──
-let recEditId = null, selectedRecType = 'fixa';
+let recEditId = null, selectedRecType = 'fixa', selectedRecMethod = 'caixa';
+
+window.selectRecMethod = (m, btn) => {
+  selectedRecMethod = m;
+  document.querySelectorAll('#recModalBg .type-toggle:nth-of-type(2) .type-btn').forEach(b=>b.classList.remove('selected','metcaixa','metcartao'));
+  if (btn) btn.classList.add('selected', m==='caixa'?'metcaixa':'metcartao');
+};
 
 window.openRecModal = (id) => {
   recEditId = id || null;
@@ -1191,6 +1228,8 @@ window.openRecModal = (id) => {
     document.getElementById('r-cat').value  = existing.category || '';
     document.getElementById('r-person').value = existing.person || 0;
     document.getElementById('r-obs').value  = existing.obs || '';
+    const em = existing.method || (existing.kind==='parcelada'?'cartao':'caixa');
+    selectRecMethod(em, document.getElementById(em==='cartao'?'rMetCartaoBtn':'rMetCaixaBtn'));
 
     const kind = existing.kind || 'fixa';
     selectRecType(kind, kind==='fixa'
@@ -1218,6 +1257,7 @@ window.openRecModal = (id) => {
     document.getElementById('r-parc-n').value     = '';
     document.getElementById('r-parc-preview').textContent = '';
     document.getElementById('r-cat').value = 'moradia';
+    selectRecMethod('caixa', document.getElementById('rMetCaixaBtn'));
     selectRecType('fixa', document.getElementById('recTypeFixBtn'));
     document.getElementById('recModalTitle').textContent = 'Nova Recorrente / Parcelada';
   }
@@ -1229,7 +1269,7 @@ window.closeRecModalBg = e => { if(e.target.id==='recModalBg') closeRecModal(); 
 
 window.selectRecType = (type, btn) => {
   selectedRecType = type;
-  document.querySelectorAll('#recModalBg .type-btn').forEach(b => {
+  document.querySelectorAll('#recModalBg .type-toggle:first-of-type .type-btn').forEach(b => {
     b.classList.remove('selected');
     b.style.borderColor=''; b.style.color=''; b.style.background='';
   });
@@ -1268,7 +1308,7 @@ window.saveRecorrente = async () => {
   const person = parseInt(document.getElementById('r-person').value);
   const obs    = document.getElementById('r-obs').value.trim();
   if (!desc||isNaN(val)||val<=0||!day||day<1||day>31) { toast('Preencha descrição, valor e dia'); return; }
-  let data = { desc, value:val, day, category:cat, person, obs, kind: selectedRecType };
+  let data = { desc, value:val, day, category:cat, person, obs, method:selectedRecMethod, kind: selectedRecType };
   if (selectedRecType === 'fixa') {
     const start = document.getElementById('r-start').value;
     const end   = document.getElementById('r-end').value;
