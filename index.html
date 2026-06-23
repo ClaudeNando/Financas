@@ -230,6 +230,7 @@
     <div class="tabs">
       <button class="tab active" onclick="showView('dashboard',this)">📊 Resumo</button>
       <button class="tab" onclick="showView('lancamentos',this)">📋 Lançamentos</button>
+      <button class="tab" onclick="showView('invest',this)">📈 Investir</button>
       <button class="tab" onclick="showView('orcamento',this)">🎯 Orçamento</button>
       <button class="tab" onclick="showView('categorias',this)">🏷️ Cats</button>
       <button class="tab" onclick="showView('pessoas',this)">👥 Pessoas</button>
@@ -239,10 +240,10 @@
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view active">
       <div class="grid-4">
-        <div class="card"><div class="card-label">Receitas</div><div class="card-value green" id="d-receitas">R$ 0</div><div class="card-sub" id="d-rec-sub"></div></div>
+        <div class="card clickable" onclick="openCardList('credit')" title="Ver lançamentos"><div class="card-label">Receitas 🔍</div><div class="card-value green" id="d-receitas">R$ 0</div><div class="card-sub" id="d-rec-sub"></div></div>
         <div class="card clickable" onclick="openCardList('debit')" title="Ver lançamentos"><div class="card-label">Gastos em Dinheiro 🔍</div><div class="card-value red" id="d-dinheiro">R$ 0</div><div class="card-sub" id="d-dinheiro-sub"></div></div>
-        <div class="card clickable" onclick="openCardList('card')" title="Ver lançamentos"><div class="card-label">A Pagar no Cartão 🔍</div><div class="card-value yellow" id="d-cartao">R$ 0</div><div class="card-sub" id="d-cartao-sub"></div></div>
         <div class="card"><div class="card-label">Caixa do Mês</div><div class="card-value" id="d-caixa">R$ 0</div><div class="card-sub" id="d-caixa-sub"></div></div>
+        <div class="card clickable" onclick="openCardList('card')" title="Ver lançamentos"><div class="card-label">A Pagar no Cartão 🔍</div><div class="card-value yellow" id="d-cartao">R$ 0</div><div class="card-sub" id="d-cartao-sub"></div></div>
       </div>
       <div class="balance-bar"><h3>Distribuição por Categoria</h3><div class="bar-wrap" id="catBars"></div></div>
 
@@ -304,6 +305,19 @@
       </div>
 
       <div class="tx-list" id="fullList"></div>
+    </div>
+
+    <!-- INVESTIMENTOS -->
+    <div id="view-invest" class="view">
+      <div class="grid-4" style="grid-template-columns:repeat(2,1fr)">
+        <div class="card"><div class="card-label">Total Investido</div><div class="card-value blue" id="i-total">R$ 0</div><div class="card-sub">patrimônio acumulado</div></div>
+        <div class="card"><div class="card-label">Aportes no Mês</div><div class="card-value blue" id="i-mes">R$ 0</div><div class="card-sub" id="i-mes-sub"></div></div>
+      </div>
+      <div class="section-head">
+        <h2>Investimentos</h2>
+        <button class="btn primary sm" onclick="openInvestModal()">+ Investimento</button>
+      </div>
+      <div class="tx-list" id="invList"></div>
     </div>
 
     <!-- CATEGORIAS -->
@@ -377,6 +391,14 @@
         <button class="type-btn selected metcaixa" id="metCaixaBtn" onclick="selectMethod('caixa',this)">💵 Caixa (pix/dinheiro)</button>
         <button class="type-btn" id="metCartaoBtn" onclick="selectMethod('cartao',this)">💳 Cartão</button>
       </div>
+    </div>
+    <div id="form-invest" style="display:none">
+      <label>Tipo de investimento</label>
+      <div class="type-toggle">
+        <button class="type-btn selected metcaixa" id="invAporteBtn" onclick="selectInvKind('aporte',this)">💸 Novo aporte</button>
+        <button class="type-btn" id="invExistBtn" onclick="selectInvKind('existente',this)">📊 Saldo já existente</button>
+      </div>
+      <div style="font-size:.73rem;color:var(--text2);margin:-4px 0 12px">Novo aporte sai do caixa. Saldo existente apenas registra o patrimônio (não mexe no caixa).</div>
     </div>
     <div id="fatura-hint" style="display:none;font-size:.73rem;color:var(--blue);background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:12px">
       💡 Pagamento de fatura: <strong>sai do caixa</strong> e <strong>não conta como despesa nova</strong> (as compras já entraram quando foram feitas no cartão).
@@ -637,8 +659,8 @@ const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 // method: 'caixa' (pix/dinheiro/débito) ou 'cartao'. Lançamentos antigos type==='card' = cartão.
 const txMethod  = t => t.method || (t.type==='card' ? 'cartao' : 'caixa');
 const isDespesa = t => t.type==='debit' || t.type==='card' || t.type==='recorrente';
-// sai do dinheiro em caixa: invest, pagamento de fatura e despesas à vista
-const saiCaixa  = t => t.type==='invest' || t.type==='fatura' || (isDespesa(t) && txMethod(t)==='caixa');
+// sai do dinheiro em caixa: aporte novo, pagamento de fatura e despesas à vista
+const saiCaixa  = t => (t.type==='invest' && txMethod(t)!=='existente') || t.type==='fatura' || (isDespesa(t) && txMethod(t)==='caixa');
 const isCartao  = t => isDespesa(t) && txMethod(t)==='cartao';
 
 // ── RENDER ──
@@ -648,6 +670,7 @@ function renderAll() {
   switch (currentView) {
     case 'dashboard':   renderDashboard(); renderHistChart(); break;
     case 'lancamentos': renderTransactions(); break;
+    case 'invest':      renderInvest(); break;
     case 'orcamento':   renderOrcamento(); break;
     case 'categorias':  renderCategories(); break;
     case 'pessoas':     renderPeople(); break;
@@ -659,10 +682,11 @@ function renderDashboard() {
   const txs = getTx();
   const rec  = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
   const inv  = txs.filter(t=>t.type==='invest').reduce((s,t)=>s+t.value,0);
+  const invAporte = txs.filter(t=>t.type==='invest' && txMethod(t)!=='existente').reduce((s,t)=>s+t.value,0);
   const aVista = txs.filter(t=>isDespesa(t)&&txMethod(t)==='caixa').reduce((s,t)=>s+t.value,0);
   const cartao = txs.filter(isCartao).reduce((s,t)=>s+t.value,0);
   const fatPg  = txs.filter(t=>t.type==='fatura').reduce((s,t)=>s+t.value,0);
-  const saidaCaixa = aVista + inv + fatPg;
+  const saidaCaixa = aVista + invAporte + fatPg;
   const caixa = rec - saidaCaixa;
   const $    = id => document.getElementById(id);
 
@@ -675,9 +699,12 @@ function renderDashboard() {
   $('d-cartao').textContent       = fmt(cartao);
   $('d-cartao-sub').textContent   = 'fatura deste mês';
 
+  $('d-invest').textContent       = fmt(inv);
+  $('d-inv-sub').textContent      = txs.filter(t=>t.type==='invest').length + ' aplicação(ões)';
+
   $('d-caixa').textContent        = fmt(caixa);
   $('d-caixa').className          = 'card-value '+(caixa>=0?'green':'red');
-  $('d-caixa-sub').textContent    = `Invest: ${fmt(inv)} · Fatura paga: ${fmt(fatPg)}`;
+  $('d-caixa-sub').textContent    = `Receitas ${fmt(rec)} − saídas ${fmt(saidaCaixa)}`;
 
   const catT = {};
   txs.filter(t=>isDespesa(t) && t.category!=='salario')
@@ -942,8 +969,9 @@ window.openModal = id => {
       // migra lançamentos antigos type==='card' → despesa no cartão
       let tType = t.type, tMethod = txMethod(t);
       if (tType==='card') tType='debit';
-      selectMethod(tMethod, document.getElementById(tMethod==='cartao'?'metCartaoBtn':'metCaixaBtn'));
       selectType(tType,null,true);
+      if (tType==='debit')  selectMethod(tMethod==='cartao'?'cartao':'caixa', document.getElementById(tMethod==='cartao'?'metCartaoBtn':'metCaixaBtn'));
+      if (tType==='invest') selectInvKind(tMethod==='existente'?'existente':'aporte', document.getElementById(tMethod==='existente'?'invExistBtn':'invAporteBtn'));
     }
     document.getElementById('modalTitle').textContent='Editar Lançamento';
   } else {
@@ -968,11 +996,22 @@ window.selectType = (type, btn, silent) => {
     const btns = document.querySelectorAll('#modalBg .type-toggle:first-of-type .type-btn');
     if (idx>=0 && btns[idx]) btns[idx].classList.add('selected',type);
   }
-  // Forma só para Despesa
-  document.getElementById('form-forma').style.display  = type==='debit' ? 'block' : 'none';
+  // blocos condicionais
+  document.getElementById('form-forma').style.display  = type==='debit'  ? 'block' : 'none';
+  document.getElementById('form-invest').style.display = type==='invest' ? 'block' : 'none';
   document.getElementById('fatura-hint').style.display = type==='fatura' ? 'block' : 'none';
   document.getElementById('card-hint').style.display   = (type==='debit' && selectedMethod==='cartao') ? 'block' : 'none';
-  if (type==='credit' && !silent) document.getElementById('f-cat').value='salario';
+  if (!silent) {
+    if (type==='debit')  selectMethod('caixa', document.getElementById('metCaixaBtn'));
+    if (type==='invest') selectInvKind('aporte', document.getElementById('invAporteBtn'));
+    if (type==='credit') document.getElementById('f-cat').value='salario';
+  }
+};
+
+window.selectInvKind = (k, btn) => {
+  selectedMethod = (k==='aporte') ? 'caixa' : 'existente';
+  document.querySelectorAll('#form-invest .type-btn').forEach(b=>b.classList.remove('selected','metcaixa','metcartao'));
+  if (btn) btn.classList.add('selected', k==='aporte'?'metcaixa':'metcartao');
 };
 
 window.selectMethod = (m, btn) => {
@@ -993,7 +1032,7 @@ window.saveTransaction = async () => {
   const btn = document.getElementById('saveBtn');
   btn.disabled=true; btn.textContent='Salvando...';
   const tx = {desc, value:val, date, category, person, obs, type:selectedType};
-  tx.method = (selectedType==='debit') ? selectedMethod : 'caixa';
+  tx.method = (selectedType==='debit' || selectedType==='invest') ? selectedMethod : 'caixa';
   try {
     if(editId) { await updateDoc(txRef(editId),{...tx, updatedAt:serverTimestamp()}); editId=null; }
     else { await addDoc(txCol(),{...tx, createdAt:serverTimestamp()}); }
@@ -1357,6 +1396,26 @@ window.showView = (name, btn) => {
 window.openCardList = (f) => {
   showView('lancamentos', null);
   setFilter(f, null);
+};
+
+function renderInvest() {
+  const all = transactions.filter(t=>t.type==='invest');
+  const total = all.reduce((s,t)=>s+t.value,0);
+  const mesArr = all.filter(t=>{ const d=new Date(t.date+'T12:00:00'); return d.getMonth()===currentMonth && d.getFullYear()===currentYear; });
+  const aportesMes = mesArr.filter(t=>txMethod(t)!=='existente').reduce((s,t)=>s+t.value,0);
+  const ti = document.getElementById('i-total');   if (ti) ti.textContent = fmt(total);
+  const tm = document.getElementById('i-mes');      if (tm) tm.textContent = fmt(aportesMes);
+  const ms = document.getElementById('i-mes-sub');  if (ms) ms.textContent = MONTHS[currentMonth]+' '+currentYear;
+  const el = document.getElementById('invList');    if (!el) return;
+  const list = all.sort((a,b)=>new Date(b.date)-new Date(a.date));
+  el.innerHTML = list.length
+    ? list.map(t=>txCard(t, false)).join('')
+    : '<div class="empty"><div class="empty-icon">📈</div><p>Nenhum investimento registrado</p></div>';
+}
+
+window.openInvestModal = () => {
+  openModal();
+  selectType('invest', null, false);
 };
 
 window.exportData = () => {
