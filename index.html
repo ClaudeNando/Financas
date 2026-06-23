@@ -681,7 +681,6 @@ function renderAll() {
 function renderDashboard() {
   const txs = getTx();
   const rec  = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
-  const inv  = txs.filter(t=>t.type==='invest').reduce((s,t)=>s+t.value,0);
   const invAporte = txs.filter(t=>t.type==='invest' && txMethod(t)!=='existente').reduce((s,t)=>s+t.value,0);
   const aVista = txs.filter(t=>isDespesa(t)&&txMethod(t)==='caixa').reduce((s,t)=>s+t.value,0);
   const cartao = txs.filter(isCartao).reduce((s,t)=>s+t.value,0);
@@ -698,9 +697,6 @@ function renderDashboard() {
 
   $('d-cartao').textContent       = fmt(cartao);
   $('d-cartao-sub').textContent   = 'fatura deste mês';
-
-  $('d-invest').textContent       = fmt(inv);
-  $('d-inv-sub').textContent      = txs.filter(t=>t.type==='invest').length + ' aplicação(ões)';
 
   $('d-caixa').textContent        = fmt(caixa);
   $('d-caixa').className          = 'card-value '+(caixa>=0?'green':'red');
