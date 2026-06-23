@@ -700,7 +700,7 @@ function renderDashboard() {
 
   $('d-caixa').textContent        = fmt(caixa);
   $('d-caixa').className          = 'card-value '+(caixa>=0?'green':'red');
-  $('d-caixa-sub').textContent    = `Receitas ${fmt(rec)} − saídas ${fmt(saidaCaixa)}`;
+  $('d-caixa-sub').textContent    = `Após pagar cartão: ${fmt(caixa - cartao)}`;
 
   const catT = {};
   txs.filter(t=>isDespesa(t) && t.category!=='salario')
