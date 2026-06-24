@@ -243,7 +243,7 @@
         <div class="card clickable" onclick="openCardList('credit')" title="Ver lançamentos"><div class="card-label">Receitas 🔍</div><div class="card-value green" id="d-receitas">R$ 0</div><div class="card-sub" id="d-rec-sub"></div></div>
         <div class="card clickable" onclick="openCardList('debit')" title="Ver lançamentos"><div class="card-label">Gastos em Dinheiro 🔍</div><div class="card-value red" id="d-dinheiro">R$ 0</div><div class="card-sub" id="d-dinheiro-sub"></div></div>
         <div class="card"><div class="card-label">Caixa do Mês</div><div class="card-value" id="d-caixa">R$ 0</div><div class="card-sub" id="d-caixa-sub"></div></div>
-        <div class="card clickable" onclick="openCardList('card')" title="Ver lançamentos"><div class="card-label">A Pagar no Cartão 🔍</div><div class="card-value yellow" id="d-cartao">R$ 0</div><div class="card-sub" id="d-cartao-sub"></div></div>
+        <div class="card clickable" onclick="openBankModal()" title="Detalhar por cartão"><div class="card-label">A Pagar no Cartão 🔍</div><div class="card-value yellow" id="d-cartao">R$ 0</div><div class="card-sub" id="d-cartao-sub"></div></div>
       </div>
       <div class="balance-bar"><h3>Distribuição por Categoria</h3><div class="bar-wrap" id="catBars"></div></div>
 
@@ -391,6 +391,10 @@
         <button class="type-btn selected metcaixa" id="metCaixaBtn" onclick="selectMethod('caixa',this)">💵 Caixa (pix/dinheiro)</button>
         <button class="type-btn" id="metCartaoBtn" onclick="selectMethod('cartao',this)">💳 Cartão</button>
       </div>
+      <div id="form-bank" style="display:none">
+        <label>Cartão (banco)</label>
+        <select id="f-bank"></select>
+      </div>
     </div>
     <div id="form-invest" style="display:none">
       <label>Tipo de investimento</label>
@@ -456,6 +460,10 @@
       <button class="type-btn selected metcaixa" id="rMetCaixaBtn" onclick="selectRecMethod('caixa',this)">💵 Caixa</button>
       <button class="type-btn" id="rMetCartaoBtn" onclick="selectRecMethod('cartao',this)">💳 Cartão</button>
     </div>
+    <div id="r-form-bank" style="display:none">
+      <label>Cartão (banco)</label>
+      <select id="r-bank"></select>
+    </div>
     <div class="form-row">
       <div class="form-group"><label>Valor (R$) *</label><input id="r-val" type="number" step="0.01" min="0" placeholder="0,00" /></div>
       <div class="form-group"><label id="r-day-label">Dia do mês *</label><input id="r-day" type="number" min="1" max="31" placeholder="Ex: 10" /></div>
@@ -487,6 +495,19 @@
       <button class="btn" id="recSaveBtn" style="flex:1" onclick="saveRecorrente()">Salvar</button>
       <button class="btn ghost" onclick="closeRecModal()">Cancelar</button>
     </div>
+  </div>
+</div>
+
+<!-- DETALHAMENTO POR CARTÃO -->
+<div class="modal-backdrop" id="bankModalBg" onclick="closeBankModalBg(event)">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+      <h2 style="margin:0">A Pagar no Cartão</h2>
+      <span id="bank-total" style="font-family:'JetBrains Mono',monospace;color:var(--yellow);font-size:1rem"></span>
+    </div>
+    <p style="font-size:.75rem;color:var(--text2);margin:0 0 14px">Fatura por banco emissor no mês selecionado</p>
+    <div id="bankDetail"></div>
+    <div style="margin-top:14px"><button class="btn ghost" style="width:100%" onclick="closeBankModal()">Fechar</button></div>
   </div>
 </div>
 
@@ -522,7 +543,7 @@ let state = {
   names: ['Fernando', 'Esposa'],
   categories: [
     {id:'moradia',     name:'Moradia',             emoji:'🏠'},
-    {id:'alimentacao', name:'Alimentação',          emoji:'🛒'},
+    {id:'alimentacao', name:'Mercado',              emoji:'🛒'},
     {id:'transporte',  name:'Transporte',           emoji:'🚗'},
     {id:'saude',       name:'Saúde',                emoji:'💊'},
     {id:'educacao',    name:'Educação',             emoji:'🎓'},
@@ -532,7 +553,12 @@ let state = {
     {id:'salario',     name:'Salário',              emoji:'💰'},
     {id:'outros',      name:'Outros',               emoji:'📦'},
   ],
-  budgets: {} // { catId: limitValue }
+  budgets: {}, // { catId: limitValue }
+  banks: [
+    {id:'sicoob',   name:'SICOOB'},
+    {id:'xp',       name:'XP'},
+    {id:'bradesco', name:'Bradesco'},
+  ]
 };
 let transactions = [];
 let recorrentes  = [];
@@ -550,6 +576,17 @@ const sync = s => {
 };
 
 // ── BOOT ──
+// Migração única: recorrentes antigas sem 'method' recebem method explícito
+// (parcelada→cartao, fixa→caixa) para entrarem corretamente nos cálculos.
+async function migrarMethodRecorrentes(docs) {
+  for (const d of docs) {
+    const r = d.data();
+    if (r.method === undefined || r.method === null) {
+      const method = (r.kind === 'parcelada') ? 'cartao' : 'caixa';
+      try { await updateDoc(recRef(d.id), { method }); } catch {}
+    }
+  }
+}
 async function boot() {
   try {
     const snap = await getDoc(setRef()).catch(()=>null);
@@ -557,7 +594,14 @@ async function boot() {
       const d = snap.data();
       if (d.names)      state.names      = d.names;
       if (d.categories) state.categories = d.categories;
+      // ALT2: renomeia 'Alimentação' → 'Mercado' (mesma id) nos settings legados
+      const catAlim = state.categories.find(c=>c.id==='alimentacao');
+      if (catAlim && catAlim.name !== 'Mercado') {
+        catAlim.name = 'Mercado';
+        saveSettings();
+      }
       if (d.budgets)    state.budgets    = d.budgets;
+      if (d.banks)      state.banks      = d.banks;
     }
     if (unsub) unsub();
     unsub = onSnapshot(txCol(), s => {
@@ -565,8 +609,10 @@ async function boot() {
       renderAll(); sync('ok');
     }, () => sync('error'));
     if (unsubRec) unsubRec();
+    let recMigrado = false;
     unsubRec = onSnapshot(recCol(), s => {
       recorrentes = s.docs.map(d=>({id:d.id,...d.data()}));
+      if (!recMigrado) { recMigrado = true; migrarMethodRecorrentes(s.docs); }
       renderAll();
     }, () => {});
   } catch {
@@ -610,6 +656,7 @@ function getRecorrentesForMonth(m, y) {
           obs: r.obs,
           type: 'recorrente',
           method: r.method || 'caixa',
+          bank: r.bank || null,
           isRecorrente: true,
           recKind: 'fixa'
         });
@@ -633,6 +680,7 @@ function getRecorrentesForMonth(m, y) {
           obs: r.obs,
           type: 'recorrente',
           method: r.method || 'cartao',
+          bank: r.bank || null,
           isRecorrente: true,
           recKind: 'parcelada',
           parcAtual,
@@ -662,6 +710,9 @@ const isDespesa = t => t.type==='debit' || t.type==='card' || t.type==='recorren
 // sai do dinheiro em caixa: aporte novo, pagamento de fatura e despesas à vista
 const saiCaixa  = t => (t.type==='invest' && txMethod(t)!=='existente') || t.type==='fatura' || (isDespesa(t) && txMethod(t)==='caixa');
 const isCartao  = t => isDespesa(t) && txMethod(t)==='cartao';
+// banco emissor do cartão (compatível com lançamentos antigos sem banco)
+const txBank     = t => t.bank || '_undef';
+const bankName   = id => (state.banks.find(b=>b.id===id)||{}).name || (id==='_undef' ? 'Não definido' : id);
 
 // ── RENDER ──
 let currentView = 'dashboard';
@@ -918,7 +969,7 @@ function renderConfig() {
 
 async function saveSettings() {
   sync('syncing');
-  try { await setDoc(setRef(),{names:state.names,categories:state.categories,budgets:state.budgets||{}},{merge:true}); sync('ok'); }
+  try { await setDoc(setRef(),{names:state.names,categories:state.categories,budgets:state.budgets||{},banks:state.banks||[]},{merge:true}); sync('ok'); }
   catch { sync('error'); toast('Erro ao salvar configurações'); }
 }
 
@@ -949,6 +1000,7 @@ window.openModal = id => {
   document.getElementById('f-obs').value='';
   document.getElementById('f-cat').innerHTML = state.categories.map(c=>`<option value="${esc(c.id)}">${esc(c.emoji)} ${esc(c.name)}</option>`).join('');
   document.getElementById('f-person').innerHTML = state.names.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('');
+  document.getElementById('f-bank').innerHTML = state.banks.map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
   // reset
   selectedType='credit'; selectedMethod='caixa';
   selectMethod('caixa', document.getElementById('metCaixaBtn'));
@@ -967,6 +1019,7 @@ window.openModal = id => {
       if (tType==='card') tType='debit';
       selectType(tType,null,true);
       if (tType==='debit')  selectMethod(tMethod==='cartao'?'cartao':'caixa', document.getElementById(tMethod==='cartao'?'metCartaoBtn':'metCaixaBtn'));
+      if (tType==='debit' && tMethod==='cartao' && t.bank) document.getElementById('f-bank').value=t.bank;
       if (tType==='invest') selectInvKind(tMethod==='existente'?'existente':'aporte', document.getElementById(tMethod==='existente'?'invExistBtn':'invAporteBtn'));
     }
     document.getElementById('modalTitle').textContent='Editar Lançamento';
@@ -1015,6 +1068,7 @@ window.selectMethod = (m, btn) => {
   document.querySelectorAll('#form-forma .type-btn').forEach(b=>b.classList.remove('selected','metcaixa','metcartao'));
   if (btn) btn.classList.add('selected', m==='caixa'?'metcaixa':'metcartao');
   document.getElementById('card-hint').style.display = (selectedType==='debit' && m==='cartao') ? 'block' : 'none';
+  document.getElementById('form-bank').style.display  = (m==='cartao') ? 'block' : 'none';
 };
 
 window.saveTransaction = async () => {
@@ -1029,6 +1083,7 @@ window.saveTransaction = async () => {
   btn.disabled=true; btn.textContent='Salvando...';
   const tx = {desc, value:val, date, category, person, obs, type:selectedType};
   tx.method = (selectedType==='debit' || selectedType==='invest') ? selectedMethod : 'caixa';
+  tx.bank = (selectedType==='debit' && selectedMethod==='cartao') ? document.getElementById('f-bank').value : null;
   try {
     if(editId) { await updateDoc(txRef(editId),{...tx, updatedAt:serverTimestamp()}); editId=null; }
     else { await addDoc(txCol(),{...tx, createdAt:serverTimestamp()}); }
@@ -1248,6 +1303,7 @@ window.selectRecMethod = (m, btn) => {
   selectedRecMethod = m;
   document.querySelectorAll('#recModalBg .type-toggle:nth-of-type(2) .type-btn').forEach(b=>b.classList.remove('selected','metcaixa','metcartao'));
   if (btn) btn.classList.add('selected', m==='caixa'?'metcaixa':'metcartao');
+  document.getElementById('r-form-bank').style.display = (m==='cartao') ? 'block' : 'none';
 };
 
 window.openRecModal = (id) => {
@@ -1257,6 +1313,7 @@ window.openRecModal = (id) => {
   // populate selects
   document.getElementById('r-cat').innerHTML    = state.categories.map(c=>`<option value="${esc(c.id)}">${esc(c.emoji)} ${esc(c.name)}</option>`).join('');
   document.getElementById('r-person').innerHTML = state.names.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('');
+  document.getElementById('r-bank').innerHTML   = state.banks.map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
 
   const now = new Date();
   const ym  = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
@@ -1271,6 +1328,7 @@ window.openRecModal = (id) => {
     document.getElementById('r-obs').value  = existing.obs || '';
     const em = existing.method || (existing.kind==='parcelada'?'cartao':'caixa');
     selectRecMethod(em, document.getElementById(em==='cartao'?'rMetCartaoBtn':'rMetCaixaBtn'));
+    if (em==='cartao' && existing.bank) document.getElementById('r-bank').value = existing.bank;
 
     const kind = existing.kind || 'fixa';
     selectRecType(kind, kind==='fixa'
@@ -1349,7 +1407,7 @@ window.saveRecorrente = async () => {
   const person = parseInt(document.getElementById('r-person').value);
   const obs    = document.getElementById('r-obs').value.trim();
   if (!desc||isNaN(val)||val<=0||!day||day<1||day>31) { toast('Preencha descrição, valor e dia'); return; }
-  let data = { desc, value:val, day, category:cat, person, obs, method:selectedRecMethod, kind: selectedRecType };
+  let data = { desc, value:val, day, category:cat, person, obs, method:selectedRecMethod, bank: (selectedRecMethod==='cartao' ? document.getElementById('r-bank').value : null), kind: selectedRecType };
   if (selectedRecType === 'fixa') {
     const start = document.getElementById('r-start').value;
     const end   = document.getElementById('r-end').value;
@@ -1393,6 +1451,42 @@ window.openCardList = (f) => {
   showView('lancamentos', null);
   setFilter(f, null);
 };
+
+// Detalhamento da fatura do cartão por banco emissor (mês selecionado)
+window.openBankModal = () => {
+  const cartoes = getTx().filter(isCartao);           // à vista (1x) + parceladas + recorrentes no cartão
+  const total = cartoes.reduce((s,t)=>s+t.value,0);
+  document.getElementById('bank-total').textContent = fmt(total);
+
+  // agrupa por banco, na ordem de state.banks + grupo "Não definido" ao final
+  const ordem = [...state.banks.map(b=>b.id), '_undef'];
+  const grupos = {};
+  cartoes.forEach(t=>{ const b = txBank(t); (grupos[b] = grupos[b]||[]).push(t); });
+
+  const blocos = ordem
+    .filter(id => grupos[id] && grupos[id].length)
+    .map(id => {
+      const itens = grupos[id].sort((a,b)=>new Date(b.date)-new Date(a.date));
+      const sub = itens.reduce((s,t)=>s+t.value,0);
+      const linhas = itens.map(t=>{
+        const tag = t.recKind==='parcelada' ? ' · parcelada' : t.type==='recorrente' ? ' · recorrente' : '';
+        return `<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:.82rem">
+          <span style="color:var(--text2)">${esc(t.desc)}${tag}</span>
+          <span style="font-family:'JetBrains Mono',monospace;white-space:nowrap">${fmt(t.value)}</span></div>`;
+      }).join('');
+      return `<div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+          <strong>💳 ${esc(bankName(id))}</strong>
+          <span style="font-family:'JetBrains Mono',monospace;color:var(--yellow)">${fmt(sub)}</span>
+        </div>${linhas}</div>`;
+    }).join('');
+
+  document.getElementById('bankDetail').innerHTML = blocos ||
+    '<div class="empty"><div class="empty-icon">💳</div><p>Nenhuma compra no cartão este mês</p></div>';
+  document.getElementById('bankModalBg').classList.add('open');
+};
+window.closeBankModal   = () => document.getElementById('bankModalBg').classList.remove('open');
+window.closeBankModalBg = e => { if(e.target.id==='bankModalBg') closeBankModal(); };
 
 function renderInvest() {
   const all = transactions.filter(t=>t.type==='invest');
