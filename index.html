@@ -291,7 +291,7 @@
 
       <!-- BUSCA POR NOME -->
       <div style="position:relative;margin-bottom:10px">
-        <input id="txSearch" type="text" placeholder="🔍 Buscar lançamento..." oninput="renderTransactions()"
+        <input id="txSearch" type="text" placeholder="🔍 Buscar por nome ou valor..." oninput="renderTransactions()"
           style="padding-left:12px;padding-right:32px" />
         <button onclick="clearSearch()" id="searchClear"
           style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text2);cursor:pointer;font-size:.9rem;padding:2px">✕</button>
@@ -827,11 +827,16 @@ window.renderTransactions = function renderTransactions() {
 
   // apply search
   if (query) {
-    txs = txs.filter(t =>
-      t.desc.toLowerCase().includes(query) ||
-      (t.obs||'').toLowerCase().includes(query) ||
-      (state.categories.find(c=>c.id===t.category)?.name||'').toLowerCase().includes(query)
-    );
+    const qNum = query.replace(/[r$\s.]/gi,'').replace(',','.'); // normaliza valor digitado
+    txs = txs.filter(t => {
+      const valStr  = String(t.value);
+      const valBR   = t.value.toFixed(2).replace('.',',');
+      const matchVal = qNum !== '' && !isNaN(qNum) && (valStr.includes(qNum) || valBR.includes(query.replace(/[r$\s]/gi,'')));
+      return t.desc.toLowerCase().includes(query) ||
+        (t.obs||'').toLowerCase().includes(query) ||
+        (state.categories.find(c=>c.id===t.category)?.name||'').toLowerCase().includes(query) ||
+        matchVal;
+    });
   }
 
   const emptyMsg = query ? 'Nenhum resultado para "' + query + '"' : 'Nenhum lançamento';
