@@ -491,6 +491,10 @@
     </div>
 
     <div class="form-group"><label>Observação</label><input id="r-obs" type="text" placeholder="Opcional" /></div>
+    <div id="r-hard-delete-zone" style="display:none;margin-bottom:14px;padding:10px;border:1px solid rgba(248,113,113,.3);border-radius:var(--radius-sm);background:rgba(248,113,113,.06)">
+      <div style="font-size:.72rem;color:var(--text2);margin-bottom:6px">Ação rara: use somente se esta recorrente foi cadastrada errada e nunca deveria ter existido. Isso apaga também os meses já ocorridos.</div>
+      <button class="btn danger sm" type="button" onclick="hardDeleteRec()">🗑 Excluir definitivamente (apaga histórico)</button>
+    </div>
     <div style="display:flex;gap:8px">
       <button class="btn" id="recSaveBtn" style="flex:1" onclick="saveRecorrente()">Salvar</button>
       <button class="btn ghost" onclick="closeRecModal()">Cancelar</button>
@@ -669,7 +673,12 @@ function getRecorrentesForMonth(m, y) {
       const [sy, sm] = r.startYM.split('-').map(Number);
       const startYM = sy * 12 + (sm - 1);
       const parcelN = r.parcelas;
-      const endYM = startYM + parcelN - 1;
+      let endYM = startYM + parcelN - 1;
+      // canceledAtYM: recorrente encerrada a partir de um mês (preserva parcelas já ocorridas)
+      if (r.canceledAtYM) {
+        const [cy, cm] = r.canceledAtYM.split('-').map(Number);
+        endYM = Math.min(endYM, cy * 12 + (cm - 1));
+      }
       if (ym >= startYM && ym <= endYM) {
         const parcAtual = ym - startYM + 1;
         const day = Math.min(r.day, new Date(y, m + 1, 0).getDate());
@@ -794,7 +803,7 @@ function txCard(t, selectable = false) {
   const delBtn = t.isRecorrente
     ? `<div class="tx-actions">
          <button class="tx-del" onclick="openRecModal('${esc(t.recId)}')" title="Editar">✏️</button>
-         <button class="tx-del" onclick="deleteRec('${esc(t.recId)}')" title="Excluir">🗑</button>
+         <button class="tx-del" onclick="deleteRec('${esc(t.recId)}')" title="Encerrar a partir deste mês">🗑</button>
        </div>`
     : `<div class="tx-actions">
          <button class="tx-del" onclick="openModal('${esc(t.id)}')" title="Editar">✏️</button>
@@ -1370,6 +1379,7 @@ window.openRecModal = (id) => {
     document.getElementById('recModalTitle').textContent = 'Nova Recorrente / Parcelada';
   }
 
+  document.getElementById('r-hard-delete-zone').style.display = existing ? 'block' : 'none';
   document.getElementById('recModalBg').classList.add('open');
 };
 window.closeRecModal   = () => document.getElementById('recModalBg').classList.remove('open');
@@ -1440,10 +1450,42 @@ window.saveRecorrente = async () => {
   btn.disabled=false; btn.textContent='Salvar';
 };
 
+// Ação padrão do 🗑: ENCERRA a partir do mês em exibição, preservando os meses
+// anteriores (que já aconteceram de verdade). Só apaga de fato se a recorrente
+// ainda não teve nenhuma ocorrência até este mês (nada de histórico a proteger).
 window.deleteRec = async id => {
-  if (!confirm('Excluir esta recorrente? Ela deixará de aparecer em todos os meses.')) return;
-  try { await deleteDoc(recRef(id)); toast('Recorrente removida'); }
-  catch { toast('Erro ao remover'); }
+  const r = recorrentes.find(x => x.id === id);
+  if (!r) return;
+  const viewedYM = currentYear * 12 + currentMonth;
+  const [sy, sm] = r.startYM.split('-').map(Number);
+  const startYM = sy * 12 + (sm - 1);
+
+  if (startYM > viewedYM) {
+    if (!confirm('Esta recorrente ainda não teve nenhuma ocorrência até este mês. Excluir?')) return;
+    try { await deleteDoc(recRef(id)); toast('Recorrente removida'); }
+    catch { toast('Erro ao remover'); }
+    return;
+  }
+
+  const mesLabel = MONTHS[currentMonth] + '/' + currentYear;
+  if (!confirm(`Encerrar esta recorrente a partir de ${mesLabel}? Os meses anteriores continuam exatamente como estão.`)) return;
+  const ym = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+  try {
+    if (r.kind === 'fixa') { await updateDoc(recRef(id), { endYM: ym }); }
+    else                   { await updateDoc(recRef(id), { canceledAtYM: ym }); }
+    toast('Encerrada a partir de ' + mesLabel);
+  } catch { toast('Erro ao encerrar'); }
+};
+
+// Ação rara e explícita: corrige o histórico de verdade (uso: cadastro errado).
+window.hardDeleteRec = async () => {
+  if (!recEditId) return;
+  if (!confirm('ATENÇÃO: isso apaga esta recorrente e TODOS os meses já ocorridos dela, inclusive os passados. Use somente se foi um erro de cadastro. Confirma?')) return;
+  try {
+    await deleteDoc(recRef(recEditId));
+    closeRecModal();
+    toast('Excluída definitivamente (histórico incluso)');
+  } catch { toast('Erro ao excluir'); }
 };
 
 window.showView = (name, btn) => {
