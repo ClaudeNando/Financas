@@ -407,6 +407,10 @@
     <div id="fatura-hint" style="display:none;font-size:.73rem;color:var(--blue);background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:12px">
       💡 Pagamento de fatura: <strong>sai do caixa</strong> e <strong>não conta como despesa nova</strong> (as compras já entraram quando foram feitas no cartão).
     </div>
+    <div id="form-fatura-bank" style="display:none" class="form-group">
+      <label>De qual cartão é esta fatura?</label>
+      <select id="f-fatura-bank"></select>
+    </div>
     <div id="card-hint" style="display:none;font-size:.73rem;color:var(--yellow);background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:12px">
       💡 Compra parcelada no cartão? Use a aba <strong>🔁 Recorrente → Parcelada</strong> para distribuir as parcelas automaticamente.
     </div>
@@ -1022,6 +1026,7 @@ window.openModal = id => {
   document.getElementById('f-cat').innerHTML = state.categories.map(c=>`<option value="${esc(c.id)}">${esc(c.emoji)} ${esc(c.name)}</option>`).join('');
   document.getElementById('f-person').innerHTML = state.names.map((n,i)=>`<option value="${i}">${esc(n)}</option>`).join('');
   document.getElementById('f-bank').innerHTML = state.banks.map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
+  document.getElementById('f-fatura-bank').innerHTML = state.banks.map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');
   // reset
   selectedType='credit'; selectedMethod='caixa';
   selectMethod('caixa', document.getElementById('metCaixaBtn'));
@@ -1042,6 +1047,7 @@ window.openModal = id => {
       if (tType==='debit')  selectMethod(tMethod==='cartao'?'cartao':'caixa', document.getElementById(tMethod==='cartao'?'metCartaoBtn':'metCaixaBtn'));
       if (tType==='debit' && tMethod==='cartao' && t.bank) document.getElementById('f-bank').value=t.bank;
       if (tType==='invest') selectInvKind(tMethod==='existente'?'existente':'aporte', document.getElementById(tMethod==='existente'?'invExistBtn':'invAporteBtn'));
+      if (tType==='fatura' && t.bank) document.getElementById('f-fatura-bank').value=t.bank;
     }
     document.getElementById('modalTitle').textContent='Editar Lançamento';
   } else {
@@ -1070,6 +1076,7 @@ window.selectType = (type, btn, silent) => {
   document.getElementById('form-forma').style.display  = type==='debit'  ? 'block' : 'none';
   document.getElementById('form-invest').style.display = type==='invest' ? 'block' : 'none';
   document.getElementById('fatura-hint').style.display = type==='fatura' ? 'block' : 'none';
+  document.getElementById('form-fatura-bank').style.display = type==='fatura' ? 'block' : 'none';
   document.getElementById('card-hint').style.display   = (type==='debit' && selectedMethod==='cartao') ? 'block' : 'none';
   if (!silent) {
     if (type==='debit')  selectMethod('caixa', document.getElementById('metCaixaBtn'));
@@ -1104,7 +1111,9 @@ window.saveTransaction = async () => {
   btn.disabled=true; btn.textContent='Salvando...';
   const tx = {desc, value:val, date, category, person, obs, type:selectedType};
   tx.method = (selectedType==='debit' || selectedType==='invest') ? selectedMethod : 'caixa';
-  tx.bank = (selectedType==='debit' && selectedMethod==='cartao') ? document.getElementById('f-bank').value : null;
+  tx.bank = (selectedType==='debit' && selectedMethod==='cartao') ? document.getElementById('f-bank').value
+          : (selectedType==='fatura') ? document.getElementById('f-fatura-bank').value
+          : null;
   try {
     if(editId) { await updateDoc(txRef(editId),{...tx, updatedAt:serverTimestamp()}); editId=null; }
     else { await addDoc(txCol(),{...tx, createdAt:serverTimestamp()}); }
@@ -1553,15 +1562,20 @@ window.openBankModal = () => {
   const total = cartoes.reduce((s,t)=>s+t.value,0);
   document.getElementById('bank-total').textContent = fmt(total);
 
-  // agrupa por banco, na ordem de state.banks + grupo "Não definido" ao final
+  // conciliação: fatura paga este mês, por banco
+  const faturas = getTx().filter(t=>t.type==='fatura');
+  const faturaPorBanco = {};
+  faturas.forEach(t=>{ const b = txBank(t); faturaPorBanco[b] = (faturaPorBanco[b]||0) + t.value; });
+
+  // agrupa compras por banco, na ordem de state.banks + grupo "Não definido" ao final
   const ordem = [...state.banks.map(b=>b.id), '_undef'];
   const grupos = {};
   cartoes.forEach(t=>{ const b = txBank(t); (grupos[b] = grupos[b]||[]).push(t); });
 
   const blocos = ordem
-    .filter(id => grupos[id] && grupos[id].length)
+    .filter(id => (grupos[id] && grupos[id].length) || faturaPorBanco[id])
     .map(id => {
-      const itens = grupos[id].sort((a,b)=>new Date(b.date)-new Date(a.date));
+      const itens = (grupos[id]||[]).sort((a,b)=>new Date(b.date)-new Date(a.date));
       const sub = itens.reduce((s,t)=>s+t.value,0);
       const linhas = itens.map(t=>{
         const tag = t.recKind==='parcelada' ? ' · parcelada' : t.type==='recorrente' ? ' · recorrente' : '';
@@ -1569,11 +1583,27 @@ window.openBankModal = () => {
           <span style="color:var(--text2)">${esc(t.desc)}${tag}</span>
           <span style="font-family:'JetBrains Mono',monospace;white-space:nowrap">${fmt(t.value)}</span></div>`;
       }).join('');
+
+      let conciliacao = '';
+      if (id !== '_undef') {
+        const faturaPaga = faturaPorBanco[id] || 0;
+        const diff = sub - faturaPaga;
+        if (faturaPaga === 0 && sub > 0) {
+          conciliacao = `<div style="font-size:.72rem;color:var(--text2);margin-top:4px">Fatura ainda não lançada este mês</div>`;
+        } else if (sub === 0 && faturaPaga > 0) {
+          conciliacao = `<div style="font-size:.72rem;color:var(--yellow);margin-top:4px">⚠️ Fatura paga (${fmt(faturaPaga)}) mas nenhuma compra lançada neste cartão este mês</div>`;
+        } else if (Math.abs(diff) > 0.01) {
+          conciliacao = `<div style="font-size:.72rem;color:var(--red);margin-top:4px">⚠️ Fatura paga (${fmt(faturaPaga)}) difere das compras em ${fmt(Math.abs(diff))}</div>`;
+        } else {
+          conciliacao = `<div style="font-size:.72rem;color:var(--green);margin-top:4px">✅ Fatura bate com as compras do cartão</div>`;
+        }
+      }
+
       return `<div style="margin-bottom:14px">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
           <strong>💳 ${esc(bankName(id))}</strong>
           <span style="font-family:'JetBrains Mono',monospace;color:var(--yellow)">${fmt(sub)}</span>
-        </div>${linhas}</div>`;
+        </div>${linhas}${conciliacao}</div>`;
     }).join('');
 
   document.getElementById('bankDetail').innerHTML = blocos ||
