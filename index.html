@@ -245,6 +245,14 @@
         <div class="card"><div class="card-label">Caixa do Mês</div><div class="card-value" id="d-caixa">R$ 0</div><div class="card-sub" id="d-caixa-sub"></div></div>
         <div class="card clickable" onclick="openBankModal()" title="Detalhar por cartão"><div class="card-label">A Pagar no Cartão 🔍</div><div class="card-value yellow" id="d-cartao">R$ 0</div><div class="card-sub" id="d-cartao-sub"></div></div>
       </div>
+      <div class="balance-bar" id="futureWrap">
+        <h3>Mês que Vem — Despesas Já Conhecidas</h3>
+        <div style="display:flex;flex-direction:column;gap:8px" id="futureList"></div>
+        <div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-weight:600">
+          <span style="font-size:.82rem">Total já comprometido</span>
+          <span id="futureTotal" style="font-family:'JetBrains Mono',monospace;color:var(--yellow)"></span>
+        </div>
+      </div>
       <div class="balance-bar"><h3>Distribuição por Categoria</h3><div class="bar-wrap" id="catBars"></div></div>
 
       <!-- COMPARATIVO 6 MESES -->
@@ -409,7 +417,7 @@
     </div>
     <div id="form-fatura-bank" style="display:none" class="form-group">
       <label>De qual cartão é esta fatura?</label>
-      <select id="f-fatura-bank"></select>
+      <select id="f-fatura-bank" onchange="fillFaturaValor()"></select>
     </div>
     <div id="card-hint" style="display:none;font-size:.73rem;color:var(--yellow);background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:12px">
       💡 Compra parcelada no cartão? Use a aba <strong>🔁 Recorrente → Parcelada</strong> para distribuir as parcelas automaticamente.
@@ -712,13 +720,21 @@ function getRecorrentesForMonth(m, y) {
   return result;
 }
 
-function getTx() {
+function getTxForMonth(m, y) {
   const manual = transactions.filter(t => {
     const dt = new Date(t.date + 'T12:00:00');
-    return dt.getMonth()===currentMonth && dt.getFullYear()===currentYear;
+    return dt.getMonth()===m && dt.getFullYear()===y;
   });
-  const virtual = getRecorrentesForMonth(currentMonth, currentYear);
+  const virtual = getRecorrentesForMonth(m, y);
   return [...manual, ...virtual];
+}
+function getTx() {
+  return getTxForMonth(currentMonth, currentYear);
+}
+// Ciclo real do cartão: a fatura fecha no dia 1 e cobre as compras do mês
+// anterior inteiro (confirmado pelo usuário, vale para todos os bancos).
+function prevMonthYM(m, y) {
+  return m === 0 ? { m: 11, y: y - 1 } : { m: m - 1, y };
 }
 const fmt = v => 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -749,6 +765,30 @@ function renderAll() {
   }
 }
 
+// Mostra o que já está comprometido para o mês que vem: a fatura que vai
+// fechar (= compras no cartão deste mês) + despesas fixas em caixa já
+// agendadas via recorrente. Não projeta receita (decisão explícita: sem dado
+// de receita futura confiável, melhor não estimar do que estimar errado).
+function renderFuturo(cartaoAtual) {
+  let nm = currentMonth + 1, ny = currentYear;
+  if (nm > 11) { nm = 0; ny++; }
+  const despesasCaixaProxMes = getRecorrentesForMonth(nm, ny)
+    .filter(t => isDespesa(t) && txMethod(t) === 'caixa')
+    .reduce((s, t) => s + t.value, 0);
+  const total = cartaoAtual + despesasCaixaProxMes;
+
+  document.getElementById('futureList').innerHTML = `
+    <div style="display:flex;justify-content:space-between;font-size:.82rem">
+      <span style="color:var(--text2)">💳 Fatura do cartão (compras deste mês)</span>
+      <span style="font-family:'JetBrains Mono',monospace">${fmt(cartaoAtual)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:.82rem">
+      <span style="color:var(--text2)">🔁 Despesas fixas em caixa já agendadas</span>
+      <span style="font-family:'JetBrains Mono',monospace">${fmt(despesasCaixaProxMes)}</span>
+    </div>`;
+  document.getElementById('futureTotal').textContent = fmt(total);
+}
+
 function renderDashboard() {
   const txs = getTx();
   const rec  = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
@@ -772,6 +812,8 @@ function renderDashboard() {
   $('d-caixa').textContent        = fmt(caixa);
   $('d-caixa').className          = 'card-value '+(caixa>=0?'green':'red');
   $('d-caixa-sub').textContent    = `Após pagar cartão: ${fmt(caixa - cartao)}`;
+
+  renderFuturo(cartao);
 
   const catT = {};
   txs.filter(t=>isDespesa(t) && t.category!=='salario')
@@ -1062,6 +1104,20 @@ window.openModal = id => {
 window.closeModal   = () => document.getElementById('modalBg').classList.remove('open');
 window.closeModalBg = e => { if(e.target.id==='modalBg') closeModal(); };
 
+// Sugere o valor da fatura = compras daquele cartão no mês anterior (fecha dia
+// 1, paga por volta do dia 10). Só em lançamento novo — nunca sobrescreve um
+// lançamento já existente que esteja sendo editado.
+window.fillFaturaValor = () => {
+  if (editId) return;
+  const bankId = document.getElementById('f-fatura-bank').value;
+  const { m: pm, y: py } = prevMonthYM(currentMonth, currentYear);
+  const total = getTxForMonth(pm, py)
+    .filter(isCartao)
+    .filter(t => txBank(t) === bankId)
+    .reduce((s, t) => s + t.value, 0);
+  document.getElementById('f-val').value = total > 0 ? total.toFixed(2) : '';
+};
+
 window.selectType = (type, btn, silent) => {
   selectedType = type;
   const order = ['credit','debit','invest','fatura'];
@@ -1082,6 +1138,7 @@ window.selectType = (type, btn, silent) => {
     if (type==='debit')  selectMethod('caixa', document.getElementById('metCaixaBtn'));
     if (type==='invest') selectInvKind('aporte', document.getElementById('invAporteBtn'));
     if (type==='credit') document.getElementById('f-cat').value='salario';
+    if (type==='fatura') fillFaturaValor();
   }
 };
 
@@ -1562,10 +1619,17 @@ window.openBankModal = () => {
   const total = cartoes.reduce((s,t)=>s+t.value,0);
   document.getElementById('bank-total').textContent = fmt(total);
 
-  // conciliação: fatura paga este mês, por banco
+  // conciliação: fatura fecha dia 1 e cobre as compras do mês ANTERIOR — não
+  // deste mês (que ainda está se formando e vai virar a fatura do mês que vem).
   const faturas = getTx().filter(t=>t.type==='fatura');
   const faturaPorBanco = {};
   faturas.forEach(t=>{ const b = txBank(t); faturaPorBanco[b] = (faturaPorBanco[b]||0) + t.value; });
+
+  const { m: pm, y: py } = prevMonthYM(currentMonth, currentYear);
+  const comprasMesAnteriorPorBanco = {};
+  getTxForMonth(pm, py).filter(isCartao).forEach(t=>{
+    const b = txBank(t); comprasMesAnteriorPorBanco[b] = (comprasMesAnteriorPorBanco[b]||0) + t.value;
+  });
 
   // agrupa compras por banco, na ordem de state.banks + grupo "Não definido" ao final
   const ordem = [...state.banks.map(b=>b.id), '_undef'];
@@ -1573,7 +1637,7 @@ window.openBankModal = () => {
   cartoes.forEach(t=>{ const b = txBank(t); (grupos[b] = grupos[b]||[]).push(t); });
 
   const blocos = ordem
-    .filter(id => (grupos[id] && grupos[id].length) || faturaPorBanco[id])
+    .filter(id => (grupos[id] && grupos[id].length) || faturaPorBanco[id] || comprasMesAnteriorPorBanco[id])
     .map(id => {
       const itens = (grupos[id]||[]).sort((a,b)=>new Date(b.date)-new Date(a.date));
       const sub = itens.reduce((s,t)=>s+t.value,0);
@@ -1584,18 +1648,20 @@ window.openBankModal = () => {
           <span style="font-family:'JetBrains Mono',monospace;white-space:nowrap">${fmt(t.value)}</span></div>`;
       }).join('');
 
+      // conciliação: fatura paga ESTE mês deve bater com as compras do MÊS ANTERIOR
       let conciliacao = '';
       if (id !== '_undef') {
-        const faturaPaga = faturaPorBanco[id] || 0;
-        const diff = sub - faturaPaga;
-        if (faturaPaga === 0 && sub > 0) {
-          conciliacao = `<div style="font-size:.72rem;color:var(--text2);margin-top:4px">Fatura ainda não lançada este mês</div>`;
-        } else if (sub === 0 && faturaPaga > 0) {
-          conciliacao = `<div style="font-size:.72rem;color:var(--yellow);margin-top:4px">⚠️ Fatura paga (${fmt(faturaPaga)}) mas nenhuma compra lançada neste cartão este mês</div>`;
+        const faturaPaga     = faturaPorBanco[id] || 0;
+        const comprasAnterior = comprasMesAnteriorPorBanco[id] || 0;
+        const diff = comprasAnterior - faturaPaga;
+        if (faturaPaga === 0 && comprasAnterior > 0) {
+          conciliacao = `<div style="font-size:.72rem;color:var(--text2);margin-top:4px">Compras do mês anterior: ${fmt(comprasAnterior)} · fatura ainda não lançada este mês</div>`;
+        } else if (comprasAnterior === 0 && faturaPaga > 0) {
+          conciliacao = `<div style="font-size:.72rem;color:var(--yellow);margin-top:4px">⚠️ Fatura paga (${fmt(faturaPaga)}) mas não há compras lançadas no mês anterior para este cartão</div>`;
         } else if (Math.abs(diff) > 0.01) {
-          conciliacao = `<div style="font-size:.72rem;color:var(--red);margin-top:4px">⚠️ Fatura paga (${fmt(faturaPaga)}) difere das compras em ${fmt(Math.abs(diff))}</div>`;
+          conciliacao = `<div style="font-size:.72rem;color:var(--red);margin-top:4px">⚠️ Fatura paga (${fmt(faturaPaga)}) difere das compras do mês anterior (${fmt(comprasAnterior)}) em ${fmt(Math.abs(diff))}</div>`;
         } else {
-          conciliacao = `<div style="font-size:.72rem;color:var(--green);margin-top:4px">✅ Fatura bate com as compras do cartão</div>`;
+          conciliacao = `<div style="font-size:.72rem;color:var(--green);margin-top:4px">✅ Fatura (${fmt(faturaPaga)}) bate com as compras do mês anterior</div>`;
         }
       }
 
