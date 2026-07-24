@@ -447,6 +447,9 @@
 <div class="modal-backdrop" id="recModalBg" onclick="closeRecModalBg(event)">
   <div class="modal">
     <h2 id="recModalTitle">Nova Recorrente / Parcelada</h2>
+    <div id="rec-fork-hint" style="display:none;font-size:.73rem;color:var(--blue);background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.2);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:12px">
+      💡 Esta alteração só vale a partir de <strong id="rec-fork-hint-month"></strong>. Os meses anteriores continuam exatamente como estão.
+    </div>
 
     <!-- tipo de recorrente -->
     <div class="type-toggle" style="margin-bottom:14px">
@@ -1315,7 +1318,24 @@ function renderRecorrentes() {
 }
 
 // ── RECORRENTE MODAL ──
-let recEditId = null, selectedRecType = 'fixa', selectedRecMethod = 'caixa';
+let recEditId = null, selectedRecType = 'fixa', selectedRecMethod = 'caixa', recForkInfo = null;
+
+// Se a recorrente já tem ocorrência em mês anterior ao mês em exibição, uma
+// edição não pode mexer nela — precisa "bifurcar": a versão antiga é congelada
+// até o mês anterior, e uma versão nova nasce a partir do mês atual.
+function computeRecForkInfo(existing) {
+  const viewedYM = currentYear * 12 + currentMonth;
+  const [sy, sm] = existing.startYM.split('-').map(Number);
+  const startYM = sy * 12 + (sm - 1);
+  if (startYM >= viewedYM) return { willFork: false };
+  const newStartYM = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+  let newParcelas = null;
+  if (existing.kind === 'parcelada') {
+    const parcAtual = viewedYM - startYM + 1;
+    newParcelas = Math.max(1, existing.parcelas - parcAtual + 1);
+  }
+  return { willFork: true, newStartYM, newParcelas };
+}
 
 window.selectRecMethod = (m, btn) => {
   selectedRecMethod = m;
@@ -1353,16 +1373,27 @@ window.openRecModal = (id) => {
       ? document.getElementById('recTypeFixBtn')
       : document.getElementById('recTypeParcBtn'));
 
+    recForkInfo = computeRecForkInfo(existing);
+    const forkHint = document.getElementById('rec-fork-hint');
+    if (recForkInfo.willFork) {
+      forkHint.style.display = 'block';
+      document.getElementById('rec-fork-hint-month').textContent = MONTHS[currentMonth] + '/' + currentYear;
+    } else {
+      forkHint.style.display = 'none';
+    }
+
     if (kind === 'fixa') {
-      document.getElementById('r-start').value = existing.startYM || ym;
+      document.getElementById('r-start').value = recForkInfo.willFork ? recForkInfo.newStartYM : (existing.startYM || ym);
       document.getElementById('r-end').value   = existing.endYM || '';
     } else {
-      document.getElementById('r-parc-start').value = existing.startYM || ym;
-      document.getElementById('r-parc-n').value     = existing.parcelas || '';
+      document.getElementById('r-parc-start').value = recForkInfo.willFork ? recForkInfo.newStartYM : (existing.startYM || ym);
+      document.getElementById('r-parc-n').value     = recForkInfo.willFork ? recForkInfo.newParcelas : (existing.parcelas || '');
       updateParcPreview();
     }
     document.getElementById('recModalTitle').textContent = 'Editar Recorrente';
   } else {
+    recForkInfo = null;
+    document.getElementById('rec-fork-hint').style.display = 'none';
     // NEW MODE — reset all fields
     document.getElementById('r-desc').value = '';
     document.getElementById('r-val').value  = '';
@@ -1443,8 +1474,21 @@ window.saveRecorrente = async () => {
   const btn = document.getElementById('recSaveBtn');
   btn.disabled=true; btn.textContent='Salvando...';
   try {
-    if (recEditId) { await updateDoc(recRef(recEditId), {...data, updatedAt:serverTimestamp()}); recEditId=null; }
-    else           { await addDoc(recCol(), {...data, createdAt:serverTimestamp()}); }
+    if (recEditId && recForkInfo && recForkInfo.willFork) {
+      // Congela a versão antiga no mês anterior (preserva o passado) e nasce uma nova a partir de agora.
+      const oldExisting = recorrentes.find(r => r.id === recEditId);
+      let pm = currentMonth - 1, py = currentYear;
+      if (pm < 0) { pm = 11; py--; }
+      const prevYM = `${py}-${String(pm + 1).padStart(2, '0')}`;
+      if (oldExisting.kind === 'fixa') { await updateDoc(recRef(recEditId), { endYM: prevYM }); }
+      else                             { await updateDoc(recRef(recEditId), { canceledAtYM: prevYM }); }
+      await addDoc(recCol(), {...data, createdAt:serverTimestamp()});
+      recEditId = null; recForkInfo = null;
+    } else if (recEditId) {
+      await updateDoc(recRef(recEditId), {...data, updatedAt:serverTimestamp()}); recEditId=null;
+    } else {
+      await addDoc(recCol(), {...data, createdAt:serverTimestamp()});
+    }
     closeRecModal(); toast('Recorrente salva!');
   } catch { toast('Erro ao salvar'); }
   btn.disabled=false; btn.textContent='Salvar';
