@@ -518,6 +518,9 @@ import {
   getFirestore, doc, getDoc, setDoc, collection,
   onSnapshot, addDoc, deleteDoc, updateDoc, getDocs, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {
+  getAuth, signInAnonymously, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ── FIREBASE ──
 const FB = {
@@ -528,8 +531,9 @@ const FB = {
   messagingSenderId: "1056952816127",
   appId: "1:1056952816127:web:853d7fda3309f10a0a97ca"
 };
-const app = initializeApp(FB);
-const db  = getFirestore(app);
+const app  = initializeApp(FB);
+const db   = getFirestore(app);
+const auth = getAuth(app);
 
 const FAMILY = 'familia_principal';
 const setRef  = () => doc(db, 'families', FAMILY, 'settings', 'main');
@@ -1570,7 +1574,15 @@ window.toast = msg => {
 
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 
-boot();
+// Autenticação anônima: sem tela de login, mas cria uma sessão exigida pelas
+// Firestore Rules (request.auth != null). boot() só roda após login confirmado.
+onAuthStateChanged(auth, user => { if (user) boot(); });
+signInAnonymously(auth).catch(() => {
+  sync('error');
+  toast('Erro de autenticação — verifique sua internet');
+  document.getElementById('loadingOverlay').classList.add('hidden');
+  document.getElementById('appShell').style.display = 'flex';
+});
 </script>
 </body>
 </html>
