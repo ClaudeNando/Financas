@@ -1,0 +1,18 @@
+{
+  "name": "Europa 2026",
+  "short_name": "Europa 26",
+  "description": "Roteiro da viagem pela Europa — Abr/Mai 2026",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0f0f1a",
+  "theme_color": "#1a1a2e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
