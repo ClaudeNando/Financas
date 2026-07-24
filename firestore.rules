@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /families/{familyId} {
+      allow read, write: if request.auth != null;
+
+      match /settings/{doc} {
+        allow read, write: if request.auth != null;
+      }
+
+      match /transactions/{txId} {
+        allow read, write: if request.auth != null;
+      }
+
+      // NECESSÁRIO para recorrentes e parceladas
+      match /recorrentes/{recId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
