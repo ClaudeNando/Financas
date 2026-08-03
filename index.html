@@ -63,6 +63,8 @@
     /* BARS */
     .balance-bar{background:var(--surface);border-radius:var(--radius);padding:18px;margin-bottom:16px;border:1px solid var(--border)}
     .balance-bar h3{font-size:.82rem;color:var(--text2);margin-bottom:12px}
+    .balance-bar.clickable{cursor:pointer;transition:border-color .15s,transform .15s}
+    .balance-bar.clickable:hover{border-color:var(--accent);transform:translateY(-1px)}
     .bar-wrap{display:flex;flex-direction:column;gap:9px}
     .bar-row{display:flex;align-items:center;gap:8px}
     .bar-name{font-size:.74rem;color:var(--text2);width:86px;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -245,8 +247,8 @@
         <div class="card"><div class="card-label">Caixa do Mês</div><div class="card-value" id="d-caixa">R$ 0</div><div class="card-sub" id="d-caixa-sub"></div></div>
         <div class="card clickable" onclick="openBankModal()" title="Detalhar por cartão"><div class="card-label">A Pagar no Cartão 🔍</div><div class="card-value yellow" id="d-cartao">R$ 0</div><div class="card-sub" id="d-cartao-sub"></div></div>
       </div>
-      <div class="balance-bar" id="futureWrap">
-        <h3>Mês que Vem — Despesas Já Conhecidas</h3>
+      <div class="balance-bar clickable" id="futureWrap" onclick="openFuturoModal()" title="Ver detalhamento">
+        <h3>Mês que Vem — Despesas Já Conhecidas 🔍</h3>
         <div style="display:flex;flex-direction:column;gap:8px" id="futureList"></div>
         <div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-weight:600">
           <span style="font-size:.82rem">Total já comprometido</span>
@@ -527,6 +529,19 @@
     <p style="font-size:.75rem;color:var(--text2);margin:0 0 14px">Fatura por banco emissor no mês selecionado</p>
     <div id="bankDetail"></div>
     <div style="margin-top:14px"><button class="btn ghost" style="width:100%" onclick="closeBankModal()">Fechar</button></div>
+  </div>
+</div>
+
+<!-- DETALHAMENTO DO MÊS QUE VEM -->
+<div class="modal-backdrop" id="futureModalBg" onclick="closeFuturoModalBg(event)">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+      <h2 style="margin:0" id="futureModalMonth">Mês que Vem</h2>
+      <span id="future-modal-total" style="font-family:'JetBrains Mono',monospace;color:var(--yellow);font-size:1rem"></span>
+    </div>
+    <p style="font-size:.75rem;color:var(--text2);margin:0 0 14px">O que já se sabe que vai virar lançamento no mês que vem</p>
+    <div id="futureModalDetail"></div>
+    <div style="margin-top:14px"><button class="btn ghost" style="width:100%" onclick="closeFuturoModal()">Fechar</button></div>
   </div>
 </div>
 
@@ -1695,6 +1710,47 @@ window.openBankModal = () => {
 };
 window.closeBankModal   = () => document.getElementById('bankModalBg').classList.remove('open');
 window.closeBankModalBg = e => { if(e.target.id==='bankModalBg') closeBankModal(); };
+
+// Detalhamento do card "Mês que Vem": itens que compõem a fatura em formação
+// (compras deste mês, projeção completa) + despesas fixas em caixa já
+// agendadas via recorrente para o mês seguinte.
+window.openFuturoModal = () => {
+  let nm = currentMonth + 1, ny = currentYear;
+  if (nm > 11) { nm = 0; ny++; }
+  document.getElementById('futureModalMonth').textContent = 'Mês que Vem — ' + MONTHS[nm] + '/' + ny;
+
+  const cartaoItens  = getTx().filter(isCartao).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const cartaoTotal  = cartaoItens.reduce((s,t)=>s+t.value,0);
+  const caixaItens   = getRecorrentesForMonth(nm, ny)
+    .filter(t => isDespesa(t) && txMethod(t)==='caixa')
+    .sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const caixaTotal   = caixaItens.reduce((s,t)=>s+t.value,0);
+
+  document.getElementById('future-modal-total').textContent = fmt(cartaoTotal + caixaTotal);
+
+  const linha = t => {
+    const cat = state.categories.find(c=>c.id===t.category)||{name:t.category||'—',emoji:'📦'};
+    const tag = t.recKind==='parcelada' ? ` · parcelada ${t.parcAtual}/${t.parcelN}` : t.type==='recorrente' ? ' · recorrente' : '';
+    return `<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:.82rem">
+      <span style="color:var(--text2)">${esc(cat.emoji)} ${esc(t.desc)}${tag}</span>
+      <span style="font-family:'JetBrains Mono',monospace;white-space:nowrap">${fmt(t.value)}</span></div>`;
+  };
+  const bloco = (titulo, itens, tot) => `<div style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+      <strong>${titulo}</strong>
+      <span style="font-family:'JetBrains Mono',monospace;color:var(--yellow)">${fmt(tot)}</span>
+    </div>
+    ${itens.length ? itens.map(linha).join('') : '<div style="font-size:.78rem;color:var(--text2)">Nada por aqui</div>'}
+  </div>`;
+
+  document.getElementById('futureModalDetail').innerHTML =
+    bloco('💳 Fatura do cartão (compras deste mês)', cartaoItens, cartaoTotal) +
+    bloco('🔁 Despesas fixas em caixa já agendadas', caixaItens, caixaTotal);
+
+  document.getElementById('futureModalBg').classList.add('open');
+};
+window.closeFuturoModal   = () => document.getElementById('futureModalBg').classList.remove('open');
+window.closeFuturoModalBg = e => { if(e.target.id==='futureModalBg') closeFuturoModal(); };
 
 function renderInvest() {
   const all = transactions.filter(t=>t.type==='invest');
