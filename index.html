@@ -750,6 +750,20 @@ const isCartao  = t => isDespesa(t) && txMethod(t)==='cartao';
 const txBank     = t => t.bank || '_undef';
 const bankName   = id => (state.banks.find(b=>b.id===id)||{}).name || (id==='_undef' ? 'Não definido' : id);
 
+// "Já devido no cartão até agora": parcelada conta desde o dia 1 (o compromisso
+// já foi assumido por inteiro quando a compra foi parcelada). Recorrente FIXA
+// no cartão (assinatura etc.) só conta a partir do dia em que ela de fato
+// renova. Só se aplica ao mês real de hoje — mês passado já aconteceu por
+// completo, mês futuro é só prévia (nada é "devido" ainda).
+const isCartaoConfirmado = t => {
+  if (t.recKind === 'parcelada') return true;
+  if (!(t.type === 'recorrente' && t.recKind === 'fixa')) return true;
+  const hoje = new Date();
+  const d = new Date(t.date + 'T12:00:00');
+  const mesReal = d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
+  return !mesReal || d.getDate() <= hoje.getDate();
+};
+
 // ── RENDER ──
 let currentView = 'dashboard';
 function renderAll() {
@@ -794,7 +808,9 @@ function renderDashboard() {
   const rec  = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
   const invAporte = txs.filter(t=>t.type==='invest' && txMethod(t)!=='existente').reduce((s,t)=>s+t.value,0);
   const aVista = txs.filter(t=>isDespesa(t)&&txMethod(t)==='caixa').reduce((s,t)=>s+t.value,0);
-  const cartao = txs.filter(isCartao).reduce((s,t)=>s+t.value,0);
+  const cartaoTodasCompras = txs.filter(isCartao);
+  const cartao = cartaoTodasCompras.filter(isCartaoConfirmado).reduce((s,t)=>s+t.value,0);
+  const cartaoProjecao = cartaoTodasCompras.reduce((s,t)=>s+t.value,0);
   const fatPg  = txs.filter(t=>t.type==='fatura').reduce((s,t)=>s+t.value,0);
   const saidaCaixa = aVista + invAporte + fatPg;
   const caixa = rec - saidaCaixa;
@@ -807,13 +823,13 @@ function renderDashboard() {
   $('d-dinheiro-sub').textContent = 'saiu do caixa (pix/dinheiro)';
 
   $('d-cartao').textContent       = fmt(cartao);
-  $('d-cartao-sub').textContent   = 'fatura deste mês';
+  $('d-cartao-sub').textContent   = 'confirmado até agora';
 
   $('d-caixa').textContent        = fmt(caixa);
   $('d-caixa').className          = 'card-value '+(caixa>=0?'green':'red');
   $('d-caixa-sub').textContent    = `Após pagar cartão: ${fmt(caixa - cartao)}`;
 
-  renderFuturo(cartao);
+  renderFuturo(cartaoProjecao);
 
   const catT = {};
   txs.filter(t=>isDespesa(t) && t.category!=='salario')
@@ -1615,7 +1631,8 @@ window.openCardList = (f) => {
 
 // Detalhamento da fatura do cartão por banco emissor (mês selecionado)
 window.openBankModal = () => {
-  const cartoes = getTx().filter(isCartao);           // à vista (1x) + parceladas + recorrentes no cartão
+  // parcelada conta desde o dia 1; recorrente fixa no cartão só a partir do dia que renova
+  const cartoes = getTx().filter(isCartao).filter(isCartaoConfirmado);
   const total = cartoes.reduce((s,t)=>s+t.value,0);
   document.getElementById('bank-total').textContent = fmt(total);
 
