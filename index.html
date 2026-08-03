@@ -794,22 +794,24 @@ function renderAll() {
   }
 }
 
-// Mostra o que já está comprometido para o mês que vem: a fatura que vai
-// fechar (= compras no cartão deste mês) + despesas fixas em caixa já
-// agendadas via recorrente. Não projeta receita (decisão explícita: sem dado
-// de receita futura confiável, melhor não estimar do que estimar errado).
-function renderFuturo(cartaoAtual) {
+// Mostra o que já está comprometido para o mês que vem: a parte do cartão que
+// AINDA NÃO apareceu em "A Pagar no Cartão" (complementar — some daqui assim
+// que o dia de renovar chega e ela passa a contar lá, sem duplicar) +
+// despesas fixas em caixa já agendadas via recorrente. Não projeta receita
+// (decisão explícita: sem dado de receita futura confiável, melhor não
+// estimar do que estimar errado).
+function renderFuturo(cartaoPendente) {
   let nm = currentMonth + 1, ny = currentYear;
   if (nm > 11) { nm = 0; ny++; }
   const despesasCaixaProxMes = getRecorrentesForMonth(nm, ny)
     .filter(t => isDespesa(t) && txMethod(t) === 'caixa')
     .reduce((s, t) => s + t.value, 0);
-  const total = cartaoAtual + despesasCaixaProxMes;
+  const total = cartaoPendente + despesasCaixaProxMes;
 
   document.getElementById('futureList').innerHTML = `
     <div style="display:flex;justify-content:space-between;font-size:.82rem">
-      <span style="color:var(--text2)">💳 Fatura do cartão (compras deste mês)</span>
-      <span style="font-family:'JetBrains Mono',monospace">${fmt(cartaoAtual)}</span>
+      <span style="color:var(--text2)">💳 Cartão — ainda vai renovar este mês</span>
+      <span style="font-family:'JetBrains Mono',monospace">${fmt(cartaoPendente)}</span>
     </div>
     <div style="display:flex;justify-content:space-between;font-size:.82rem">
       <span style="color:var(--text2)">🔁 Despesas fixas em caixa já agendadas</span>
@@ -825,7 +827,9 @@ function renderDashboard() {
   const aVista = txs.filter(t=>isDespesa(t)&&txMethod(t)==='caixa').reduce((s,t)=>s+t.value,0);
   const cartaoTodasCompras = txs.filter(isCartao);
   const cartao = cartaoTodasCompras.filter(isCartaoConfirmado).reduce((s,t)=>s+t.value,0);
-  const cartaoProjecao = cartaoTodasCompras.reduce((s,t)=>s+t.value,0);
+  // complemento exato de "cartao": só o que ainda não bateu o dia de renovar
+  // (some daqui assim que entra em "A Pagar no Cartão", sem contar duas vezes)
+  const cartaoPendente = cartaoTodasCompras.filter(t=>!isCartaoConfirmado(t)).reduce((s,t)=>s+t.value,0);
   const fatPg  = txs.filter(t=>t.type==='fatura').reduce((s,t)=>s+t.value,0);
   const saidaCaixa = aVista + invAporte + fatPg;
   const caixa = rec - saidaCaixa;
@@ -844,7 +848,7 @@ function renderDashboard() {
   $('d-caixa').className          = 'card-value '+(caixa>=0?'green':'red');
   $('d-caixa-sub').textContent    = `Após pagar cartão: ${fmt(caixa - cartao)}`;
 
-  renderFuturo(cartaoProjecao);
+  renderFuturo(cartaoPendente);
 
   const catT = {};
   txs.filter(t=>isDespesa(t) && t.category!=='salario')
@@ -1722,7 +1726,7 @@ window.openFuturoModal = () => {
   if (nm > 11) { nm = 0; ny++; }
   document.getElementById('futureModalMonth').textContent = 'Mês que Vem — ' + MONTHS[nm] + '/' + ny;
 
-  const cartaoItens  = getTx().filter(isCartao).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const cartaoItens  = getTx().filter(isCartao).filter(t=>!isCartaoConfirmado(t)).sort((a,b)=>new Date(b.date)-new Date(a.date));
   const cartaoTotal  = cartaoItens.reduce((s,t)=>s+t.value,0);
   const caixaItens   = getRecorrentesForMonth(nm, ny)
     .filter(t => isDespesa(t) && txMethod(t)==='caixa')
@@ -1747,7 +1751,7 @@ window.openFuturoModal = () => {
   </div>`;
 
   document.getElementById('futureModalDetail').innerHTML =
-    bloco('💳 Fatura do cartão (compras deste mês)', cartaoItens, cartaoTotal) +
+    bloco('💳 Cartão — ainda vai renovar este mês', cartaoItens, cartaoTotal) +
     bloco('🔁 Despesas fixas em caixa já agendadas', caixaItens, caixaTotal);
 
   document.getElementById('futureModalBg').classList.add('open');
