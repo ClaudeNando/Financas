@@ -1601,8 +1601,8 @@ window.deleteRec = async id => {
   const [sy, sm] = r.startYM.split('-').map(Number);
   const startYM = sy * 12 + (sm - 1);
 
-  if (startYM > viewedYM) {
-    if (!confirm('Esta recorrente ainda não teve nenhuma ocorrência até este mês. Excluir?')) return;
+  if (startYM >= viewedYM) {
+    if (!confirm('Esta recorrente ainda não teve nenhuma ocorrência antes deste mês. Excluir?')) return;
     try { await deleteDoc(recRef(id)); toast('Recorrente removida'); }
     catch { toast('Erro ao remover'); }
     return;
@@ -1610,10 +1610,13 @@ window.deleteRec = async id => {
 
   const mesLabel = MONTHS[currentMonth] + '/' + currentYear;
   if (!confirm(`Encerrar esta recorrente a partir de ${mesLabel}? Os meses anteriores continuam exatamente como estão.`)) return;
-  const ym = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+  // Corta no mês ANTERIOR ao que está sendo visto — o mês visto some junto
+  // (era o bug: cortava no próprio mês visto, que por ser inclusivo continuava aparecendo).
+  const { m: pm, y: py } = prevMonthYM(currentMonth, currentYear);
+  const prevYM = `${py}-${String(pm + 1).padStart(2, '0')}`;
   try {
-    if (r.kind === 'fixa') { await updateDoc(recRef(id), { endYM: ym }); }
-    else                   { await updateDoc(recRef(id), { canceledAtYM: ym }); }
+    if (r.kind === 'fixa') { await updateDoc(recRef(id), { endYM: prevYM }); }
+    else                   { await updateDoc(recRef(id), { canceledAtYM: prevYM }); }
     toast('Encerrada a partir de ' + mesLabel);
   } catch { toast('Erro ao encerrar'); }
 };
