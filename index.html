@@ -735,6 +735,15 @@ function getRecorrentesForMonth(m, y) {
   return result;
 }
 
+// Compras do dia a dia sempre primeiro (por data desc); recorrentes/parceladas
+// vão depois, também por data desc — mesmo que a data delas seja mais recente.
+function sortDiaADiaFirst(txs) {
+  const porData = (a, b) => new Date(b.date) - new Date(a.date);
+  const diaADia = txs.filter(t => !t.isRecorrente).sort(porData);
+  const recPar  = txs.filter(t => t.isRecorrente).sort(porData);
+  return [...diaADia, ...recPar];
+}
+
 function getTxForMonth(m, y) {
   const manual = transactions.filter(t => {
     const dt = new Date(t.date + 'T12:00:00');
@@ -866,7 +875,7 @@ function renderDashboard() {
       }).join('')
     : '<div class="empty" style="padding:14px 0"><p>Sem despesas este mês</p></div>';
 
-  const recent = [...txs].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,5);
+  const recent = sortDiaADiaFirst(txs).slice(0,5);
   $('recentList').innerHTML = recent.length ? recent.map(txCard).join('')
     : '<div class="empty"><div class="empty-icon">💸</div><p>Nenhum lançamento este mês</p></div>';
 }
@@ -916,7 +925,7 @@ window.renderTransactions = function renderTransactions() {
   if (clearBtn) clearBtn.style.display = query ? 'block' : 'none';
 
   // Inclui lançamentos manuais + recorrentes virtuais do mês
-  let txs = getTx().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  let txs = sortDiaADiaFirst(getTx());
 
   if (txFilter==='card')      txs = txs.filter(isCartao);
   else if (txFilter==='debit') txs = txs.filter(t=>isDespesa(t) && txMethod(t)==='caixa');
