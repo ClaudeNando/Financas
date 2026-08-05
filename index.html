@@ -855,7 +855,9 @@ function renderDashboard() {
 
   $('d-caixa').textContent        = fmt(caixa);
   $('d-caixa').className          = 'card-value '+(caixa>=0?'green':'red');
-  $('d-caixa-sub').textContent    = `Após pagar cartão: ${fmt(caixa - cartao)}`;
+  let nmSaldo = currentMonth + 1, nySaldo = currentYear;
+  if (nmSaldo > 11) { nmSaldo = 0; nySaldo++; }
+  $('d-caixa-sub').textContent    = `Saldo (${MONTHS[nmSaldo]}): ${fmt(caixa - cartao)}`;
 
   renderFuturo(cartaoPendente);
 
