@@ -1071,7 +1071,7 @@ function renderConfig() {
   document.getElementById('name1').value = state.names[0]||'';
   document.getElementById('name2').value = state.names[1]||'';
   document.getElementById('catConfigList').innerHTML = state.categories.map((c,i) => {
-    const delBtn = c.id.startsWith('c_') ? '<button class="btn danger sm" onclick="removeCat(\'' + esc(c.id) + '\')">✕</button>' : '';
+    const delBtn = '<button class="btn danger sm" onclick="removeCat(\'' + esc(c.id) + '\')">✕</button>';
     return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border)">
       <span>${esc(c.emoji)}</span>
       <input type="text" value="${esc(c.name)}" data-catid="${esc(c.id)}" onchange="renameCat(this)"
@@ -1114,7 +1114,17 @@ window.addCustomCat = async () => {
   await saveSettings(); renderConfig(); toast('Categoria adicionada!');
 };
 window.removeCat = async id => {
-  state.categories = state.categories.filter(c=>c.id!==id);
+  const cat = state.categories.find(c => c.id === id);
+  if (!cat) return;
+  const emUso = transactions.filter(t => t.category === id).length
+              + recorrentes.filter(r => r.category === id).length;
+  let msg = `Excluir a categoria "${cat.name}"?`;
+  if (emUso > 0) {
+    msg += ` Ela está em uso em ${emUso} lançamento(s)/recorrente(s) — eles continuam existindo, mas passam a aparecer sem categoria (só o ícone genérico 📦).`;
+  }
+  if (!confirm(msg)) return;
+  state.categories = state.categories.filter(c => c.id !== id);
+  if (state.budgets && state.budgets[id]) delete state.budgets[id];
   await saveSettings(); renderConfig(); toast('Categoria removida');
 };
 
