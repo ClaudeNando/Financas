@@ -1074,11 +1074,25 @@ function renderConfig() {
     const delBtn = c.id.startsWith('c_') ? '<button class="btn danger sm" onclick="removeCat(\'' + esc(c.id) + '\')">✕</button>' : '';
     return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border)">
       <span>${esc(c.emoji)}</span>
-      <span style="flex:1;font-size:.84rem">${esc(c.name)}</span>
+      <input type="text" value="${esc(c.name)}" data-catid="${esc(c.id)}" onchange="renameCat(this)"
+        style="flex:1;font-size:.84rem;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'Sora',sans-serif" />
       ${delBtn}
     </div>`;
   }).join('');
 }
+
+window.renameCat = async (input) => {
+  const id = input.dataset.catid;
+  const cat = state.categories.find(c => c.id === id);
+  if (!cat) return;
+  const newName = input.value.trim();
+  if (!newName) { input.value = cat.name; toast('Nome não pode ficar vazio'); return; }
+  if (newName === cat.name) return;
+  cat.name = newName;
+  await saveSettings();
+  renderAll();
+  toast('Categoria renomeada!');
+};
 
 async function saveSettings() {
   sync('syncing');
