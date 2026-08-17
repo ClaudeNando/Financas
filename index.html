@@ -314,6 +314,12 @@
         <button onclick="clearSelection()" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:.8rem">✕ limpar</button>
       </div>
 
+      <!-- SOMATÓRIO DO FILTRO (ex: total das recorrentes do mês) -->
+      <div id="filterTotal" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 13px;margin-bottom:10px;align-items:center;justify-content:space-between">
+        <span style="font-size:.78rem;color:var(--text2)"><span id="filterCount">0</span> recorrente(s) este mês</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.95rem;color:var(--accent2);font-weight:600" id="filterSum">R$ 0,00</span>
+      </div>
+
       <div class="tx-list" id="fullList"></div>
     </div>
 
@@ -953,6 +959,17 @@ window.renderTransactions = function renderTransactions() {
     ? txs.map(t=>txCard(t, true)).join('')
     : `<div class="empty"><div class="empty-icon">${emptyIcon}</div><p>${emptyMsg}</p></div>`;
   updateSelTotal();
+
+  const filterBar = document.getElementById('filterTotal');
+  if (filterBar) {
+    if (txFilter === 'recorrente' && txs.length) {
+      filterBar.style.display = 'flex';
+      document.getElementById('filterCount').textContent = txs.length;
+      document.getElementById('filterSum').textContent   = fmt(txs.reduce((s,t)=>s+t.value,0));
+    } else {
+      filterBar.style.display = 'none';
+    }
+  }
 }
 
 window.clearSearch = () => {
