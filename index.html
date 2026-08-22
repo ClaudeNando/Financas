@@ -274,6 +274,14 @@
 
     <!-- ORÇAMENTO -->
     <div id="view-orcamento" class="view">
+      <div id="orcGeralWrap" class="balance-bar" style="display:none">
+        <h3>Orçamento Geral do Mês</h3>
+        <div class="orc-progress"><div class="orc-fill" id="orcGeralFill"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:.8rem">
+          <span id="orcGeralGasto"></span>
+          <span id="orcGeralResto"></span>
+        </div>
+      </div>
       <div class="section-head">
         <h2>Orçamento por Categoria</h2>
         <button class="btn sm" onclick="openOrcModal()">+ Meta</button>
@@ -338,6 +346,14 @@
 
     <!-- CATEGORIAS -->
     <div id="view-categorias" class="view">
+      <div id="orcGeralWrapCats" class="balance-bar" style="display:none">
+        <h3>Orçamento Geral do Mês</h3>
+        <div class="orc-progress"><div class="orc-fill" id="orcGeralFillCats"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:.8rem">
+          <span id="orcGeralGastoCats"></span>
+          <span id="orcGeralRestoCats"></span>
+        </div>
+      </div>
       <div class="section-head"><h2>Gastos por Categoria</h2></div>
       <div id="catList"></div>
     </div>
@@ -359,6 +375,12 @@
           <div class="form-group" style="margin-bottom:0"><label>Nome — Pessoa 2</label><input id="name2" type="text" placeholder="Ex: Esposa" /></div>
         </div>
         <button class="btn" onclick="saveNames()">Salvar nomes</button>
+      </div>
+
+      <div class="settings-group">
+        <h3>Orçamento Geral</h3>
+        <div class="form-group"><label>Quanto vocês decidiram viver por mês (R$)</label><input id="orcTotalInput" type="number" step="0.01" min="0" placeholder="Ex: 11000,00" /></div>
+        <button class="btn" onclick="saveOrcTotal()">Salvar orçamento geral</button>
       </div>
 
       <div class="settings-group">
@@ -451,8 +473,9 @@
 <div class="modal-backdrop" id="orcModalBg" onclick="closeOrcModalBg(event)">
   <div class="modal">
     <h2>Definir Meta de Orçamento</h2>
-    <div class="form-group"><label>Categoria</label><select id="o-cat"></select></div>
-    <div class="form-group"><label>Limite mensal (R$) *</label><input id="o-limit" type="number" step="0.01" min="0" placeholder="Ex: 1500,00" /></div>
+    <div class="form-group"><label>Categoria</label><select id="o-cat" onchange="updateOrcAllocPreview()"></select></div>
+    <div class="form-group"><label>Limite mensal (R$) *</label><input id="o-limit" type="number" step="0.01" min="0" placeholder="Ex: 1500,00" oninput="updateOrcAllocPreview()" /></div>
+    <div id="orcAllocHint" style="display:none;font-size:.73rem;padding:6px 10px;background:var(--surface3);border-radius:var(--radius-sm);margin-bottom:12px"></div>
     <p style="font-size:.75rem;color:var(--text2);margin-bottom:14px">A meta se aplica a todos os meses. Você pode alterar ou remover a qualquer momento.</p>
     <div style="display:flex;gap:8px">
       <button class="btn" id="orcSaveBtn" style="flex:1" onclick="saveOrcamento()">Salvar</button>
@@ -598,6 +621,7 @@ let state = {
     {id:'outros',      name:'Outros',               emoji:'📦'},
   ],
   budgets: {}, // { catId: limitValue }
+  orcamentoTotal: 0, // teto mensal geral (soma de todas as despesas)
   banks: [
     {id:'sicoob',   name:'SICOOB'},
     {id:'xp',       name:'XP'},
@@ -646,6 +670,7 @@ async function boot() {
       }
       if (d.budgets)    state.budgets    = d.budgets;
       if (d.banks)      state.banks      = d.banks;
+      if (d.orcamentoTotal !== undefined) state.orcamentoTotal = d.orcamentoTotal;
     }
     if (unsub) unsub();
     unsub = onSnapshot(txCol(), s => {
@@ -1020,9 +1045,30 @@ window.setFilter = (f,btn) => {
   renderTransactions();
 };
 
+// Barra do teto geral (Config → Orçamento Geral), usada em Cats e Orçamento.
+// Some deles não gasto de todas as categorias (não das metas individuais).
+function renderOrcGeralInto(wrapId, fillId, gastoId, restoId, gastoTotal) {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  const teto = state.orcamentoTotal || 0;
+  if (!teto) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  const pct = Math.min((gastoTotal / teto * 100), 999);
+  const fillClass = pct > 100 ? 'over' : pct > 80 ? 'warn' : 'ok';
+  const fillEl = document.getElementById(fillId);
+  fillEl.className = 'orc-fill ' + fillClass;
+  fillEl.style.width = Math.min(pct, 100).toFixed(1) + '%';
+  document.getElementById(gastoId).textContent = `${fmt(gastoTotal)} de ${fmt(teto)} (${pct.toFixed(0)}%)`;
+  const resto = teto - gastoTotal;
+  const restoEl = document.getElementById(restoId);
+  restoEl.textContent = resto >= 0 ? `Sobram ${fmt(resto)}` : `Excedeu ${fmt(Math.abs(resto))}`;
+  restoEl.style.color = resto >= 0 ? 'var(--text2)' : 'var(--red)';
+}
+
 function renderCategories() {
   const txs = getTx().filter(t=>isDespesa(t) && t.category!=='salario');
   const tot = txs.reduce((s,t)=>s+t.value,0);
+  renderOrcGeralInto('orcGeralWrapCats','orcGeralFillCats','orcGeralGastoCats','orcGeralRestoCats', tot);
   const ct  = {};
   txs.forEach(t=>{ct[t.category]=(ct[t.category]||0)+t.value;});
   const sorted = Object.entries(ct).sort((a,b)=>b[1]-a[1]);
@@ -1087,6 +1133,7 @@ function renderPersonList() {
 function renderConfig() {
   document.getElementById('name1').value = state.names[0]||'';
   document.getElementById('name2').value = state.names[1]||'';
+  document.getElementById('orcTotalInput').value = state.orcamentoTotal || '';
   document.getElementById('catConfigList').innerHTML = state.categories.map((c,i) => {
     const delBtn = '<button class="btn danger sm" onclick="removeCat(\'' + esc(c.id) + '\')">✕</button>';
     return `<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border)">
@@ -1113,7 +1160,7 @@ window.renameCat = async (input) => {
 
 async function saveSettings() {
   sync('syncing');
-  try { await setDoc(setRef(),{names:state.names,categories:state.categories,budgets:state.budgets||{},banks:state.banks||[]},{merge:true}); sync('ok'); }
+  try { await setDoc(setRef(),{names:state.names,categories:state.categories,budgets:state.budgets||{},banks:state.banks||[],orcamentoTotal:state.orcamentoTotal||0},{merge:true}); sync('ok'); }
   catch { sync('error'); toast('Erro ao salvar configurações'); }
 }
 
@@ -1121,6 +1168,11 @@ window.saveNames = async () => {
   state.names[0] = document.getElementById('name1').value.trim()||'Pessoa 1';
   state.names[1] = document.getElementById('name2').value.trim()||'Pessoa 2';
   await saveSettings(); renderAll(); toast('Nomes salvos!');
+};
+window.saveOrcTotal = async () => {
+  const val = parseFloat(document.getElementById('orcTotalInput').value);
+  state.orcamentoTotal = isNaN(val) || val <= 0 ? 0 : val;
+  await saveSettings(); renderAll(); toast('Orçamento geral salvo!');
 };
 window.addCustomCat = async () => {
   const name = document.getElementById('newCatName').value.trim();
@@ -1318,6 +1370,7 @@ function renderOrcamento() {
   const el = document.getElementById('orcList');
   if (!el) return;
   const txs = getTx().filter(t=>isDespesa(t) && t.category!=='salario');
+  renderOrcGeralInto('orcGeralWrap','orcGeralFill','orcGeralGasto','orcGeralResto', txs.reduce((s,t)=>s+t.value,0));
   const budgets = state.budgets || {};
   // categories with either a budget or spending this month
   const catSpent = {};
@@ -1395,8 +1448,31 @@ window.openOrcModal = (catId) => {
   ).join('');
   if (catId) document.getElementById('o-cat').value = catId;
   document.getElementById('o-limit').value = catId && state.budgets?.[catId] ? state.budgets[catId] : '';
+  updateOrcAllocPreview();
   document.getElementById('orcModalBg').classList.add('open');
 };
+
+// Mostra quanto já foi alocado em metas de outras categorias vs o teto geral,
+// somado ao valor que está sendo digitado agora. Atualiza ao digitar/trocar categoria.
+window.updateOrcAllocPreview = () => {
+  const hint = document.getElementById('orcAllocHint');
+  const teto = state.orcamentoTotal || 0;
+  if (!teto) { hint.style.display = 'none'; return; }
+  const catId = document.getElementById('o-cat').value;
+  const novoLimite = parseFloat(document.getElementById('o-limit').value) || 0;
+  const budgets = state.budgets || {};
+  const outrasMetas = Object.entries(budgets)
+    .filter(([id]) => id !== catId)
+    .reduce((s, [, v]) => s + v, 0);
+  const totalAlocado = outrasMetas + novoLimite;
+  const resto = teto - totalAlocado;
+  hint.style.display = 'block';
+  hint.style.color = resto < 0 ? 'var(--red)' : 'var(--text2)';
+  hint.textContent = resto >= 0
+    ? `Alocado em metas: ${fmt(totalAlocado)} de ${fmt(teto)} (sobram ${fmt(resto)} para outras categorias)`
+    : `⚠️ Alocado em metas: ${fmt(totalAlocado)} de ${fmt(teto)} — ultrapassa em ${fmt(Math.abs(resto))}`;
+};
+
 window.closeOrcModal   = () => document.getElementById('orcModalBg').classList.remove('open');
 window.closeOrcModalBg = e => { if(e.target.id==='orcModalBg') closeOrcModal(); };
 
