@@ -484,6 +484,19 @@
   </div>
 </div>
 
+<!-- MODAL REATRIBUIR CATEGORIA (conserta lançamentos órfãos de categoria excluída) -->
+<div class="modal-backdrop" id="reassignModalBg" onclick="closeReassignModalBg(event)">
+  <div class="modal">
+    <h2>Reatribuir Categoria</h2>
+    <p id="reassignMsg" style="font-size:.8rem;color:var(--text2);margin-bottom:14px"></p>
+    <div class="form-group"><label>Mover para qual categoria?</label><select id="reassignTarget"></select></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="reassignConfirmBtn" style="flex:1" onclick="confirmReassign()">Mover</button>
+      <button class="btn ghost" onclick="closeReassignModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <!-- MODAL RECORRENTE -->
@@ -1075,10 +1088,12 @@ function renderCategories() {
   const clr = ['#7c6af7','#34d399','#f87171','#fbbf24','#60a5fa','#f472b6','#fb923c','#a78bfa'];
   document.getElementById('catList').innerHTML = sorted.length
     ? sorted.map(([id,val],i)=>{
-        const c    = state.categories.find(x=>x.id===id)||{name:id,emoji:'📦'};
+        const cReal = state.categories.find(x=>x.id===id);
+        const c     = cReal || {name:id,emoji:'📦'};
         const p    = tot?(val/tot*100).toFixed(1):0;
         const catTxs = txs.filter(t=>t.category===id).sort((a,b)=>new Date(b.date)-new Date(a.date));
         const items  = catTxs.map(t=>txCard(t,false)).join('');
+        const orfaWarn = cReal ? '' : `<div style="font-size:.7rem;color:var(--yellow);margin:6px 0 0">⚠️ Categoria excluída, ainda em uso — <button class="btn sm ghost" style="padding:2px 7px;font-size:.65rem" onclick="event.stopPropagation();openReassignModal('${esc(id)}',false)">🔧 Reatribuir</button></div>`;
         return `<div class="budget-cat">
           <div class="budget-cat-head" onclick="toggleCatAccordion('cat_${esc(id)}')">
             <div class="budget-cat-name">
@@ -1089,6 +1104,7 @@ function renderCategories() {
             <div class="budget-cat-amounts">${fmt(val)} <span style="color:var(--text2)">(${p}%)</span></div>
           </div>
           <div class="progress"><div class="progress-fill" style="width:${p}%;background:${clr[i%clr.length]}"></div></div>
+          ${orfaWarn}
           <div class="cat-accordion" id="cat_${esc(id)}">
             <div class="cat-accordion-inner">${items}</div>
           </div>
@@ -1182,19 +1198,67 @@ window.addCustomCat = async () => {
   document.getElementById('newCatName').value='';
   await saveSettings(); renderConfig(); toast('Categoria adicionada!');
 };
+// Categoria em uso NUNCA é excluída direto — sempre exige mover os lançamentos
+// pra outra categoria primeiro, senão eles ficam órfãos (id sem nome, "volta"
+// toda vez que a recorrente gerar um novo lançamento no mês).
 window.removeCat = async id => {
   const cat = state.categories.find(c => c.id === id);
   if (!cat) return;
   const emUso = transactions.filter(t => t.category === id).length
               + recorrentes.filter(r => r.category === id).length;
-  let msg = `Excluir a categoria "${cat.name}"?`;
   if (emUso > 0) {
-    msg += ` Ela está em uso em ${emUso} lançamento(s)/recorrente(s) — eles continuam existindo, mas passam a aparecer sem categoria (só o ícone genérico 📦).`;
+    if (state.categories.length < 2) { toast('Crie outra categoria antes de excluir esta — não há pra onde mover os lançamentos'); return; }
+    openReassignModal(id, true);
+    return;
   }
-  if (!confirm(msg)) return;
+  if (!confirm(`Excluir a categoria "${cat.name}"?`)) return;
   state.categories = state.categories.filter(c => c.id !== id);
   if (state.budgets && state.budgets[id]) delete state.budgets[id];
   await saveSettings(); renderConfig(); toast('Categoria removida');
+};
+
+// ── REATRIBUIR CATEGORIA (corrige órfãs e evita criar novas) ──
+let reassignOldId = null, reassignDeleteAfter = false;
+
+window.openReassignModal = (oldId, deleteAfter) => {
+  reassignOldId = oldId;
+  reassignDeleteAfter = deleteAfter;
+  const cat = state.categories.find(c => c.id === oldId);
+  const emUso = transactions.filter(t => t.category === oldId).length
+              + recorrentes.filter(r => r.category === oldId).length;
+  document.getElementById('reassignMsg').textContent = deleteAfter
+    ? `A categoria "${cat ? cat.name : oldId}" está em uso em ${emUso} lançamento(s)/recorrente(s). Escolha para qual categoria mover — ela é excluída assim que mover.`
+    : `Esta categoria foi excluída, mas ainda está em uso em ${emUso} lançamento(s)/recorrente(s). Escolha para qual categoria mover.`;
+  document.getElementById('reassignTarget').innerHTML = state.categories
+    .filter(c => c.id !== oldId)
+    .map(c => `<option value="${esc(c.id)}">${esc(c.emoji)} ${esc(c.name)}</option>`).join('');
+  document.getElementById('reassignModalBg').classList.add('open');
+};
+window.closeReassignModal   = () => document.getElementById('reassignModalBg').classList.remove('open');
+window.closeReassignModalBg = e => { if (e.target.id==='reassignModalBg') closeReassignModal(); };
+
+window.confirmReassign = async () => {
+  const newId = document.getElementById('reassignTarget').value;
+  if (!newId) { toast('Escolha uma categoria'); return; }
+  const btn = document.getElementById('reassignConfirmBtn');
+  btn.disabled = true; btn.textContent = 'Movendo...';
+  try {
+    const txAlvo  = transactions.filter(t => t.category === reassignOldId);
+    const recAlvo = recorrentes.filter(r => r.category === reassignOldId);
+    await Promise.all([
+      ...txAlvo.map(t => updateDoc(txRef(t.id), { category: newId })),
+      ...recAlvo.map(r => updateDoc(recRef(r.id), { category: newId })),
+    ]);
+    if (state.budgets && state.budgets[reassignOldId]) delete state.budgets[reassignOldId];
+    if (reassignDeleteAfter) {
+      state.categories = state.categories.filter(c => c.id !== reassignOldId);
+    }
+    await saveSettings();
+    closeReassignModal();
+    renderAll(); renderConfig();
+    toast(`${txAlvo.length + recAlvo.length} lançamento(s) movido(s)!`);
+  } catch { toast('Erro ao mover categoria'); }
+  btn.disabled = false; btn.textContent = 'Mover';
 };
 
 // ── MODAL ──
@@ -1382,11 +1446,13 @@ function renderOrcamento() {
   }
   // sort: over budget first, then by % spent desc
   const rows = catIds.map(id => {
-    const cat   = state.categories.find(c=>c.id===id)||{name:id,emoji:'📦'};
+    const catReal = state.categories.find(c=>c.id===id);
+    const cat   = catReal || {name:id,emoji:'📦'};
+    const orfa  = !catReal; // categoria excluída, mas ainda referenciada por algum lançamento/recorrente
     const spent = catSpent[id]||0;
     const limit = budgets[id]||0;
     const pct   = limit ? Math.min((spent/limit*100),999) : null;
-    return {id, cat, spent, limit, pct};
+    return {id, cat, orfa, spent, limit, pct};
   }).sort((a,b) => {
     if (a.pct===null && b.pct!==null) return 1;
     if (b.pct===null && a.pct!==null) return -1;
@@ -1394,13 +1460,16 @@ function renderOrcamento() {
   });
   const allTxs = getTx().filter(t=>isDespesa(t) && t.category!=='salario');
 
-  el.innerHTML = rows.map(({id, cat, spent, limit, pct}) => {
+  el.innerHTML = rows.map(({id, cat, orfa, spent, limit, pct}) => {
     const catTxs = allTxs.filter(t=>t.category===id).sort((a,b)=>new Date(b.date)-new Date(a.date));
     const items  = catTxs.map(t=>txCard(t,false)).join('');
     const accordionId = `orc_${esc(id)}`;
     const accordion = `<div class="cat-accordion" id="${accordionId}">
       <div class="cat-accordion-inner">${items||'<div style="font-size:.78rem;color:var(--text2)">Sem lançamentos este mês</div>'}</div>
     </div>`;
+    const orfaWarn = orfa
+      ? `<div style="font-size:.7rem;color:var(--yellow);margin:-4px 0 8px">⚠️ Categoria excluída, ainda em uso — <button class="btn sm ghost" style="padding:2px 7px;font-size:.65rem" onclick="event.stopPropagation();openReassignModal('${esc(id)}',false)">🔧 Reatribuir</button></div>`
+      : '';
 
     if (!limit) {
       return `<div class="orc-item">
@@ -1411,6 +1480,7 @@ function renderOrcamento() {
             <button class="btn sm ghost" onclick="event.stopPropagation();openOrcModal('${esc(id)}')">+ Meta</button>
           </div>
         </div>
+        ${orfaWarn}
         ${accordion}
       </div>`;
     }
