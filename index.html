@@ -171,6 +171,18 @@
     .chart-col-label{font-size:.63rem;color:var(--text2);text-align:center;white-space:nowrap}
     .chart-col-saldo{font-family:'JetBrains Mono',monospace;font-size:.58rem;text-align:center;margin-top:1px}
 
+    /* CALENDÁRIO DE GASTOS */
+    .cal-weekrow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:5px}
+    .cal-weekrow span{text-align:center;font-size:.62rem;color:var(--text2)}
+    .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+    .cal-day{aspect-ratio:1;border-radius:8px;background:var(--surface2);border:1px solid transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:transform .12s,border-color .12s;overflow:hidden}
+    .cal-day:hover{transform:scale(1.06)}
+    .cal-day.empty{background:transparent;cursor:default}
+    .cal-day.empty:hover{transform:none}
+    .cal-day.today{border-color:var(--accent)}
+    .cal-day-num{font-size:.66rem;font-weight:600;line-height:1}
+    .cal-day-val{font-family:'JetBrains Mono',monospace;font-size:.55rem;line-height:1;margin-top:2px;color:var(--red)}
+
     /* ORÇAMENTO */
     .orc-item{background:var(--surface);border-radius:var(--radius);padding:14px;margin-bottom:9px;border:1px solid var(--border)}
     .orc-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
@@ -247,6 +259,16 @@
         <div class="card"><div class="card-label">Caixa do Mês</div><div class="card-value" id="d-caixa">R$ 0</div><div class="card-sub" id="d-caixa-sub"></div></div>
         <div class="card clickable" onclick="openBankModal()" title="Detalhar por cartão"><div class="card-label">A Pagar no Cartão 🔍</div><div class="card-value yellow" id="d-cartao">R$ 0</div><div class="card-sub" id="d-cartao-sub"></div></div>
       </div>
+
+      <!-- CALENDÁRIO DE GASTOS -->
+      <div class="chart-wrap">
+        <h3>Calendário de Gastos</h3>
+        <div class="cal-weekrow">
+          <span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+
       <div class="balance-bar clickable" id="futureWrap" onclick="openFuturoModal()" title="Ver detalhamento">
         <h3>Mês que Vem — Despesas Já Conhecidas 🔍</h3>
         <div style="display:flex;flex-direction:column;gap:8px" id="futureList"></div>
@@ -587,6 +609,19 @@
   </div>
 </div>
 
+<!-- DETALHE DO DIA (calendário) -->
+<div class="modal-backdrop" id="dayModalBg" onclick="closeDayModalBg(event)">
+  <div class="modal">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+      <h2 style="margin:0" id="dayModalTitle">Dia</h2>
+      <span id="day-modal-total" style="font-family:'JetBrains Mono',monospace;color:var(--red);font-size:1rem"></span>
+    </div>
+    <p style="font-size:.75rem;color:var(--text2);margin:0 0 14px">Despesas lançadas neste dia</p>
+    <div id="dayModalDetail"></div>
+    <div style="margin-top:14px"><button class="btn ghost" style="width:100%" onclick="closeDayModal()">Fechar</button></div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -873,8 +908,58 @@ function renderFuturo(cartaoPendente) {
   document.getElementById('futureTotal').textContent = fmt(total);
 }
 
+function fmtCompact(v) {
+  if (v >= 1000) return (v/1000).toFixed(1).replace('.0','').replace('.',',') + 'k';
+  return v.toFixed(0);
+}
+
+// Mapa de calor do mês: um quadrado por dia, cor mais forte quanto mais se
+// gastou naquele dia (relativo ao dia de maior gasto do mês). Clique abre o
+// detalhe das despesas daquele dia.
+function renderCalendar() {
+  const el = document.getElementById('calGrid');
+  if (!el) return;
+  const porDia = {};
+  getTx().filter(isDespesa).forEach(t => {
+    const dia = new Date(t.date + 'T12:00:00').getDate();
+    porDia[dia] = (porDia[dia] || 0) + t.value;
+  });
+  const maxVal = Math.max(...Object.values(porDia), 1);
+  const diasNoMes = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const primeiroDiaSemana = new Date(currentYear, currentMonth, 1).getDay();
+  const hoje = new Date();
+  const isHoje = d => hoje.getDate()===d && hoje.getMonth()===currentMonth && hoje.getFullYear()===currentYear;
+
+  let html = '';
+  for (let i = 0; i < primeiroDiaSemana; i++) html += '<div class="cal-day empty"></div>';
+  for (let d = 1; d <= diasNoMes; d++) {
+    const val = porDia[d] || 0;
+    const bg = val > 0 ? `background:rgba(248,113,113,${(0.15 + (val/maxVal)*0.55).toFixed(2)})` : '';
+    html += `<div class="cal-day${isHoje(d)?' today':''}" style="${bg}" onclick="openDayModal(${d})">
+      <div class="cal-day-num">${d}</div>
+      ${val > 0 ? `<div class="cal-day-val">${fmtCompact(val)}</div>` : ''}
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+window.openDayModal = (day) => {
+  const dateStr = `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  const itens = getTx().filter(isDespesa).filter(t => t.date === dateStr).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const total = itens.reduce((s,t)=>s+t.value,0);
+  document.getElementById('dayModalTitle').textContent = day + ' de ' + MONTHS[currentMonth];
+  document.getElementById('day-modal-total').textContent = fmt(total);
+  document.getElementById('dayModalDetail').innerHTML = itens.length
+    ? itens.map(t=>txCard(t,false)).join('')
+    : '<div class="empty"><div class="empty-icon">📅</div><p>Nenhuma despesa neste dia</p></div>';
+  document.getElementById('dayModalBg').classList.add('open');
+};
+window.closeDayModal   = () => document.getElementById('dayModalBg').classList.remove('open');
+window.closeDayModalBg = e => { if (e.target.id==='dayModalBg') closeDayModal(); };
+
 function renderDashboard() {
   const txs = getTx();
+  renderCalendar();
   const rec  = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
   const invAporte = txs.filter(t=>t.type==='invest' && txMethod(t)!=='existente').reduce((s,t)=>s+t.value,0);
   const aVista = txs.filter(t=>isDespesa(t)&&txMethod(t)==='caixa').reduce((s,t)=>s+t.value,0);
