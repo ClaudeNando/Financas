@@ -628,7 +628,7 @@ import { initializeApp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getFirestore, doc, getDoc, setDoc, collection,
-  onSnapshot, addDoc, deleteDoc, updateDoc, getDocs, serverTimestamp
+  onSnapshot, addDoc, deleteDoc, updateDoc, getDocs, serverTimestamp, deleteField
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import {
   getAuth, signInAnonymously, onAuthStateChanged
@@ -1265,6 +1265,12 @@ async function saveSettings() {
   try { await setDoc(setRef(),{names:state.names,categories:state.categories,budgets:state.budgets||{},banks:state.banks||[],orcamentoTotal:state.orcamentoTotal||0},{merge:true}); sync('ok'); }
   catch { sync('error'); toast('Erro ao salvar configurações'); }
 }
+// merge:true não remove chaves de mapas aninhados que somem do objeto local —
+// por isso metas de orçamento "excluídas" reapareciam (órfãs) após recarregar.
+// deleteField() força a remoção real da chave no Firestore.
+async function deleteBudgetField(id) {
+  try { await setDoc(setRef(), { budgets: { [id]: deleteField() } }, { merge: true }); } catch {}
+}
 
 window.saveNames = async () => {
   state.names[0] = document.getElementById('name1').value.trim()||'Pessoa 1';
@@ -1299,7 +1305,7 @@ window.removeCat = async id => {
   }
   if (!confirm(`Excluir a categoria "${cat.name}"?`)) return;
   state.categories = state.categories.filter(c => c.id !== id);
-  if (state.budgets && state.budgets[id]) delete state.budgets[id];
+  if (state.budgets && state.budgets[id]) { delete state.budgets[id]; await deleteBudgetField(id); }
   await saveSettings(); renderConfig(); toast('Categoria removida');
 };
 
@@ -1335,7 +1341,7 @@ window.confirmReassign = async () => {
       ...txAlvo.map(t => updateDoc(txRef(t.id), { category: newId })),
       ...recAlvo.map(r => updateDoc(recRef(r.id), { category: newId })),
     ]);
-    if (state.budgets && state.budgets[reassignOldId]) delete state.budgets[reassignOldId];
+    if (state.budgets && state.budgets[reassignOldId]) { delete state.budgets[reassignOldId]; await deleteBudgetField(reassignOldId); }
     if (reassignDeleteAfter) {
       state.categories = state.categories.filter(c => c.id !== reassignOldId);
     }
@@ -1650,6 +1656,7 @@ window.saveOrcamento = async () => {
 window.removeOrc = async (catId) => {
   if (!confirm('Remover meta desta categoria?')) return;
   delete state.budgets[catId];
+  await deleteBudgetField(catId);
   await saveSettings();
   renderOrcamento();
   toast('Meta removida');
