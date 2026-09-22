@@ -849,6 +849,12 @@ const txMethod  = t => t.method || (t.type==='card' ? 'cartao' : 'caixa');
 const isDespesa = t => t.type==='debit' || t.type==='card' || t.type==='recorrente';
 // sai do dinheiro em caixa: aporte novo, pagamento de fatura e despesas à vista
 const saiCaixa  = t => (t.type==='invest' && txMethod(t)!=='existente') || t.type==='fatura' || (isDespesa(t) && txMethod(t)==='caixa');
+// mesmo saldo do card "Caixa do Mês" do Resumo: receitas menos tudo que saiu do caixa
+function calcCaixaDoMes(txs) {
+  const rec = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
+  const saida = txs.filter(saiCaixa).reduce((s,t)=>s+t.value,0);
+  return rec - saida;
+}
 const isCartao  = t => isDespesa(t) && txMethod(t)==='cartao';
 // banco emissor do cartão (compatível com lançamentos antigos sem banco)
 const txBank     = t => t.bank || '_undef';
@@ -1531,6 +1537,7 @@ function renderOrcamento() {
   // categories with either a budget or spending this month
   const catSpent = {};
   txs.forEach(t => { catSpent[t.category] = (catSpent[t.category]||0) + t.value; });
+  const caixaDoMes = calcCaixaDoMes(getTx());
   const catIds = [...new Set([...Object.keys(budgets), ...Object.keys(catSpent)])];
   if (!catIds.length) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">🎯</div><p>Nenhuma meta definida ainda.<br>Clique em "+ Meta" para começar.</p></div>';
@@ -1541,7 +1548,8 @@ function renderOrcamento() {
     const catReal = state.categories.find(c=>c.id===id);
     const cat   = catReal || {name:id,emoji:'📦'};
     const orfa  = !catReal; // categoria excluída, mas ainda referenciada por algum lançamento/recorrente
-    const spent = catSpent[id]||0;
+    // categoria de receita (id 'salario'): mostra o mesmo saldo do card "Caixa do Mês"
+    const spent = id==='salario' ? caixaDoMes : (catSpent[id]||0);
     const limit = budgets[id]||0;
     const pct   = limit ? Math.min((spent/limit*100),999) : null;
     return {id, cat, orfa, spent, limit, pct};
