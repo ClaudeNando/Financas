@@ -355,9 +355,10 @@
       <!-- SOMATÓRIO DO FILTRO POR PESSOA -->
       <div id="personTotal" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 13px;margin-bottom:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 12px">
         <span style="font-size:.78rem;color:var(--text2)"><b id="personTotalName" style="color:var(--text)"></b> · <span id="personTotalCount">0</span> lançamento(s)</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:.85rem;font-weight:600">
-          <span style="color:var(--red)">Despesas <span id="personTotalDesp">R$ 0,00</span></span>
-          <span style="color:var(--green);margin-left:10px">Receitas <span id="personTotalRec">R$ 0,00</span></span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.85rem;font-weight:600;display:flex;flex-wrap:wrap;gap:4px 12px">
+          <span style="color:var(--red)">💳 Cartão <span id="personTotalCartao">R$ 0,00</span></span>
+          <span style="color:var(--red)">💵 Dinheiro <span id="personTotalDinheiro">R$ 0,00</span></span>
+          <span style="color:var(--text)">Total <span id="personTotalDesp">R$ 0,00</span></span>
         </span>
       </div>
 
@@ -1109,8 +1110,11 @@ window.renderTransactions = function renderTransactions() {
       personBar.style.display = 'flex';
       document.getElementById('personTotalName').textContent  = state.names[Number(txPersonFilter)] || '';
       document.getElementById('personTotalCount').textContent = txs.length;
-      document.getElementById('personTotalDesp').textContent  = fmt(txs.filter(isDespesa).reduce((s,t)=>s+t.value,0));
-      document.getElementById('personTotalRec').textContent   = fmt(txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0));
+      const cartao   = txs.filter(isCartao).reduce((s,t)=>s+t.value,0);
+      const dinheiro = txs.filter(t=>isDespesa(t) && txMethod(t)==='caixa').reduce((s,t)=>s+t.value,0);
+      document.getElementById('personTotalCartao').textContent   = fmt(cartao);
+      document.getElementById('personTotalDinheiro').textContent = fmt(dinheiro);
+      document.getElementById('personTotalDesp').textContent     = fmt(cartao + dinheiro);
     } else {
       personBar.style.display = 'none';
     }
@@ -1275,12 +1279,12 @@ window.setPersonFilter = (f,btn) => {
 function renderPersonList() {
   let txs = getTx().sort((a,b)=>new Date(b.date)-new Date(a.date));
   if (personFilter!=='all') txs = txs.filter(t=>String(t.person||0)===personFilter);
-  const desp = txs.filter(isDespesa).reduce((s,t)=>s+t.value,0);
-  const rec  = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
+  const cartao   = txs.filter(isCartao).reduce((s,t)=>s+t.value,0);
+  const dinheiro = txs.filter(t=>isDespesa(t) && txMethod(t)==='caixa').reduce((s,t)=>s+t.value,0);
   const resumo = personFilter==='all' ? '' :
     `<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 13px;margin-bottom:10px;font-size:.8rem">
       <span style="color:var(--text2)">${txs.length} lançamento(s)</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-weight:600"><span style="color:var(--red)">Despesas ${fmt(desp)}</span> <span style="color:var(--green);margin-left:10px">Receitas ${fmt(rec)}</span></span>
+      <span style="font-family:'JetBrains Mono',monospace;font-weight:600;display:flex;flex-wrap:wrap;gap:4px 12px"><span style="color:var(--red)">💳 Cartão ${fmt(cartao)}</span> <span style="color:var(--red)">💵 Dinheiro ${fmt(dinheiro)}</span> <span>Total ${fmt(cartao+dinheiro)}</span></span>
     </div>`;
   document.getElementById('personList').innerHTML = txs.length ? resumo + txs.map(txCard).join('')
     : '<div class="empty"><div class="empty-icon">👥</div><p>Nenhum lançamento</p></div>';
