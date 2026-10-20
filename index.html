@@ -329,6 +329,7 @@
         <button class="filter-btn" data-f="invest" onclick="setFilter('invest',this)">📈 Invest.</button>
         <button class="filter-btn" data-f="recorrente" onclick="setFilter('recorrente',this)">🔁 Recorr.</button>
       </div>
+      <div class="filters" id="txPersonFilters"></div>
 
       <!-- BUSCA POR NOME -->
       <div style="position:relative;margin-bottom:10px">
@@ -349,6 +350,15 @@
       <div id="filterTotal" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 13px;margin-bottom:10px;align-items:center;justify-content:space-between">
         <span style="font-size:.78rem;color:var(--text2)"><span id="filterCount">0</span> recorrente(s) este mês</span>
         <span style="font-family:'JetBrains Mono',monospace;font-size:.95rem;color:var(--accent2);font-weight:600" id="filterSum">R$ 0,00</span>
+      </div>
+
+      <!-- SOMATÓRIO DO FILTRO POR PESSOA -->
+      <div id="personTotal" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 13px;margin-bottom:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 12px">
+        <span style="font-size:.78rem;color:var(--text2)"><b id="personTotalName" style="color:var(--text)"></b> · <span id="personTotalCount">0</span> lançamento(s)</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.85rem;font-weight:600">
+          <span style="color:var(--red)">Despesas <span id="personTotalDesp">R$ 0,00</span></span>
+          <span style="color:var(--green);margin-left:10px">Receitas <span id="personTotalRec">R$ 0,00</span></span>
+        </span>
       </div>
 
       <div class="tx-list" id="fullList"></div>
@@ -682,7 +692,7 @@ let recorrentes  = [];
 let unsub = null, unsubRec = null;
 let currentMonth = new Date().getMonth();
 let currentYear  = new Date().getFullYear();
-let txFilter = 'all', personFilter = 'all';
+let txFilter = 'all', personFilter = 'all', txPersonFilter = 'all';
 let editId = null, selectedType = 'credit', selectedMethod = 'caixa';
 const selectedIds = new Set();
 
@@ -1069,6 +1079,9 @@ window.renderTransactions = function renderTransactions() {
   else if (txFilter==='debit') txs = txs.filter(t=>isDespesa(t) && txMethod(t)==='caixa');
   else if (txFilter!=='all')   txs = txs.filter(t=>t.type===txFilter);
 
+  renderTxPersonFilters();
+  if (txPersonFilter!=='all') txs = txs.filter(t=>String(t.person||0)===txPersonFilter);
+
   // apply search
   if (query) {
     const qNum = query.replace(/[r$\s.]/gi,'').replace(',','.'); // normaliza valor digitado
@@ -1090,6 +1103,19 @@ window.renderTransactions = function renderTransactions() {
     : `<div class="empty"><div class="empty-icon">${emptyIcon}</div><p>${emptyMsg}</p></div>`;
   updateSelTotal();
 
+  const personBar = document.getElementById('personTotal');
+  if (personBar) {
+    if (txPersonFilter !== 'all') {
+      personBar.style.display = 'flex';
+      document.getElementById('personTotalName').textContent  = state.names[Number(txPersonFilter)] || '';
+      document.getElementById('personTotalCount').textContent = txs.length;
+      document.getElementById('personTotalDesp').textContent  = fmt(txs.filter(isDespesa).reduce((s,t)=>s+t.value,0));
+      document.getElementById('personTotalRec').textContent   = fmt(txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0));
+    } else {
+      personBar.style.display = 'none';
+    }
+  }
+
   const filterBar = document.getElementById('filterTotal');
   if (filterBar) {
     if (txFilter === 'recorrente' && txs.length) {
@@ -1101,6 +1127,21 @@ window.renderTransactions = function renderTransactions() {
     }
   }
 }
+
+function renderTxPersonFilters() {
+  const el = document.getElementById('txPersonFilters');
+  if (!el) return;
+  el.innerHTML =
+    `<button class="filter-btn ${txPersonFilter==='all'?'active':''}" onclick="setTxPerson('all')">👥 Todos</button>` +
+    state.names.map((n,i)=>
+      `<button class="filter-btn ${txPersonFilter===String(i)?'active':''}" onclick="setTxPerson(${i})">${i===0?'👨':'👩'} ${esc(n)}</button>`
+    ).join('');
+}
+window.setTxPerson = f => {
+  txPersonFilter = f==='all' ? 'all' : String(f);
+  selectedIds.clear();
+  renderTransactions();
+};
 
 window.clearSearch = () => {
   const el = document.getElementById('txSearch');
@@ -1234,7 +1275,14 @@ window.setPersonFilter = (f,btn) => {
 function renderPersonList() {
   let txs = getTx().sort((a,b)=>new Date(b.date)-new Date(a.date));
   if (personFilter!=='all') txs = txs.filter(t=>String(t.person||0)===personFilter);
-  document.getElementById('personList').innerHTML = txs.length ? txs.map(txCard).join('')
+  const desp = txs.filter(isDespesa).reduce((s,t)=>s+t.value,0);
+  const rec  = txs.filter(t=>t.type==='credit').reduce((s,t)=>s+t.value,0);
+  const resumo = personFilter==='all' ? '' :
+    `<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 13px;margin-bottom:10px;font-size:.8rem">
+      <span style="color:var(--text2)">${txs.length} lançamento(s)</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-weight:600"><span style="color:var(--red)">Despesas ${fmt(desp)}</span> <span style="color:var(--green);margin-left:10px">Receitas ${fmt(rec)}</span></span>
+    </div>`;
+  document.getElementById('personList').innerHTML = txs.length ? resumo + txs.map(txCard).join('')
     : '<div class="empty"><div class="empty-icon">👥</div><p>Nenhum lançamento</p></div>';
 }
 
